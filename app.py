@@ -138,11 +138,10 @@ if st.session_state.df is not None:
                 advice_prompt = f"""
                 As a Senior Data Analyst, evaluate these missing values:
                 {null_report}
-                
-                For each column:
-                1. Should we DROP the rows (if missingness is low/random)?
-                2. Should we FILL the rows (if the column is vital)?
-                3. What are the risks of filling this specific data?
+
+                1. Analyze the risk of bias for each column.
+                2. RECOMMEND one specific Option (A, B, or C) as the best statistical choice.
+                3. Explain WHY that option is the most scientifically sound for an IT student project.
                 """
                 response = client.chat.completions.create(
                     model="gpt-4o-mini",
@@ -161,7 +160,7 @@ if st.session_state.df is not None:
             st.rerun()
 
         if col_btn2.button("Option B: Smart Fill (Median/Mode)"):
-            temp_df = df.copy()
+            temp_df = df.advice_pcopy()
             for col in temp_df.columns:
                 if temp_df[col].isnull().sum() > 0:
                     if pd.api.types.is_numeric_dtype(temp_df[col]):
