@@ -20,6 +20,8 @@ if "df" not in st.session_state:
     st.session_state.df = None
 if "current_file" not in st.session_state:
     st.session_state.current_file = None
+if "cleaned" not in st.session_state:
+    st.session_state.cleaned = False
 
 # ---------------------------
 # Helper Functions
@@ -32,7 +34,9 @@ def sanitize_data(df):
 def standardize_categorical(df):
     df = df.copy()
     for col in df.select_dtypes(include='object').columns:
+        # Standardize casing and strip whitespace
         df[col] = df[col].astype(str).str.strip().str.lower()
+        # Common boolean/categorical normalization
         df[col] = df[col].replace({
             "yes": "yes", "y": "yes", "1": "yes", "true": "yes",
             "no": "no", "n": "no", "0": "no", "false": "no",
@@ -44,10 +48,12 @@ def fix_data_types(df):
     df = df.copy()
     for col in df.columns:
         try:
+            # Try numeric first
             df[col] = pd.to_numeric(df[col], errors='ignore')
         except:
             pass
         try:
+            # Try datetime
             df[col] = pd.to_datetime(df[col], errors='ignore')
         except:
             pass
@@ -65,9 +71,9 @@ def detect_outliers(df):
     return report
 
 # ---------------------------
-# Sidebar Upload
+# Sidebar Upload & Export
 # ---------------------------
-st.sidebar.title("📁 Upload Dataset")
+st.sidebar.title("📁 Data Management")
 
 uploaded_file = st.sidebar.file_uploader(
     "Upload CSV or Excel", type=["csv", "xlsx", "xls"]
@@ -76,6 +82,8 @@ uploaded_file = st.sidebar.file_uploader(
 if uploaded_file:
     if st.session_state.current_file != uploaded_file.name:
         st.session_state.current_file = uploaded_file.name
+        # Reset cleaning state for new file
+        st.session_state.cleaned = False 
 
         if uploaded_file.name.endswith(".csv"):
             df = pd.read_csv(uploaded_file)
@@ -84,6 +92,18 @@ if uploaded_file:
 
         df = sanitize_data(df)
         st.session_state.df = df
+
+# Export Section
+if st.session_state.df is not None and st.session_state.cleaned:
+    st.sidebar.divider()
+    st.sidebar.subheader("📥 Export Data")
+    csv = st.session_state.df.to_csv(index=False).encode('utf-8')
+    st.sidebar.download_button(
+        label="Download Cleaned CSV",
+        data=csv,
+        file_name=f"cleaned_{st.session_state.current_file if st.session_state.current_file.endswith('.csv') else st.session_state.current_file + '.csv'}",
+        mime="text/csv",
+    )
 
 # ---------------------------
 # Main App
@@ -180,7 +200,8 @@ if st.session_state.df is not None:
         temp = temp.drop_duplicates()
 
         st.session_state.df = temp
-        st.success("AI cleaning applied successfully.")
+        st.session_state.cleaned = True
+        st.success("AI cleaning applied successfully. Download available in sidebar.")
         st.rerun()
 
     # ---------------------------
@@ -193,11 +214,13 @@ if st.session_state.df is not None:
 
     if colA.button("Standardize Categories"):
         st.session_state.df = standardize_categorical(df)
+        st.session_state.cleaned = True
         st.success("Categorical standardized")
         st.rerun()
 
     if colB.button("Fix Data Types"):
         st.session_state.df = fix_data_types(df)
+        st.session_state.cleaned = True
         st.success("Types fixed")
         st.rerun()
 
@@ -205,6 +228,7 @@ if st.session_state.df is not None:
         before = len(df)
         df = df.drop_duplicates()
         st.session_state.df = df
+        st.session_state.cleaned = True
         st.success(f"Removed {before - len(df)} duplicates")
         st.rerun()
 
@@ -217,6 +241,7 @@ if st.session_state.df is not None:
                 else:
                     temp[col] = temp[col].fillna(temp[col].mode()[0])
         st.session_state.df = temp
+        st.session_state.cleaned = True
         st.success("Missing values filled")
         st.rerun()
 
