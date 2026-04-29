@@ -287,36 +287,53 @@ if st.session_state.df is not None:
         st.write(response.choices[0].message.content)
 
     # ---------------------------
-    # Visualization (FIXED)
+    # Visualization
     # ---------------------------
     st.divider()
-    st.subheader("📊 Visualization")
+    st.subheader("📊 Interactive Visualization Explorer")
 
+    # Group columns by type
     numeric_cols = df.select_dtypes(include='number').columns.tolist()
     categorical_cols = df.select_dtypes(include='object').columns.tolist()
+    date_cols = df.select_dtypes(include=['datetime', 'datetimetz']).columns.tolist()
 
-    if len(numeric_cols) >= 2:
-        x = st.selectbox("X-axis", numeric_cols)
-        y = st.selectbox("Y-axis", numeric_cols, index=1)
+    viz_type = st.radio("Select Chart Type", 
+                        ["Correlation (Scatter)", "Comparison (Bar)", "Distribution (Histogram)", "Trends (Line)"], 
+                        horizontal=True)
 
-        fig = px.scatter(df, x=x, y=y, trendline="ols")
+    if viz_type == "Correlation (Scatter)":
+        if len(numeric_cols) >= 2:
+            x = st.selectbox("X-axis (Numeric)", numeric_cols)
+            y = st.selectbox("Y-axis (Numeric)", numeric_cols, index=1)
+            fig = px.scatter(df, x=x, y=y, trendline="ols", template="plotly_dark")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Needs at least 2 numeric columns.")
+
+    elif viz_type == "Comparison (Bar)":
+        if categorical_cols and numeric_cols:
+            cat = st.selectbox("Category (X-axis)", categorical_cols)
+            num = st.selectbox("Value (Y-axis)", numeric_cols)
+            # Aggregating data so the bar chart is readable
+            df_agg = df.groupby(cat)[num].mean().reset_index()
+            fig = px.bar(df_agg, x=cat, y=num, title=f"Average {num} by {cat}", template="plotly_dark")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Needs at least 1 categorical and 1 numeric column.")
+
+    elif viz_type == "Distribution (Histogram)":
+        col = st.selectbox("Select Column to View Distribution", numeric_cols + categorical_cols)
+        fig = px.histogram(df, x=col, template="plotly_dark", nbins=20)
         st.plotly_chart(fig, use_container_width=True)
 
-    elif len(numeric_cols) == 1:
-        st.info("Only one numeric column → showing distribution")
-        col = numeric_cols[0]
-        fig = px.histogram(df, x=col)
-        st.plotly_chart(fig, use_container_width=True)
-
-    elif len(categorical_cols) > 0:
-        st.info("No numeric data → showing categorical distribution")
-        col = categorical_cols[0]
-        fig = px.bar(df[col].value_counts().reset_index(),
-                     x='index', y=col)
-        st.plotly_chart(fig, use_container_width=True)
-
-    else:
-        st.warning("No suitable data for visualization.")
+    elif viz_type == "Trends (Line)":
+        if date_cols and numeric_cols:
+            d_col = st.selectbox("Date Column", date_cols)
+            n_col = st.selectbox("Value to Track", numeric_cols)
+            fig = px.line(df.sort_values(d_col), x=d_col, y=n_col, template="plotly_dark")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No date columns found. Try 'Fix Data Types' in the cleaning section first.")
 
     # ---------------------------
     # Q&A
