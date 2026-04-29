@@ -44,11 +44,11 @@ def fix_data_types(df):
     df = df.copy()
     for col in df.columns:
         try:
-            df[col] = pd.to_numeric(df[col])
+            df[col] = pd.to_numeric(df[col], errors='ignore')
         except:
             pass
         try:
-            df[col] = pd.to_datetime(df[col])
+            df[col] = pd.to_datetime(df[col], errors='ignore')
         except:
             pass
     return df
@@ -76,6 +76,7 @@ uploaded_file = st.sidebar.file_uploader(
 if uploaded_file:
     if st.session_state.current_file != uploaded_file.name:
         st.session_state.current_file = uploaded_file.name
+
         if uploaded_file.name.endswith(".csv"):
             df = pd.read_csv(uploaded_file)
         else:
@@ -109,56 +110,95 @@ if st.session_state.df is not None:
         st.metric("Missing Cells", df.isnull().sum().sum())
 
     # ---------------------------
-    # AI Data Analysis
+    # AI CLEANING STRATEGY
     # ---------------------------
     st.divider()
-    st.subheader("🤖 AI Data Assessment")
+    st.subheader("🤖 AI Cleaning Strategy")
 
-    if st.button("Analyze Dataset"):
-        summary = df.describe(include='all').fillna("").to_string()
+    if st.button("Analyze Cleaning Strategy (AI)"):
+        with st.spinner("Analyzing dataset..."):
+            summary = df.describe(include='all').fillna("").to_string()
+            missing = df.isnull().sum().to_string()
 
-        prompt = f"""
-        You are a data analyst.
+            prompt = f"""
+            Analyze dataset and recommend cleaning strategy:
 
-        Analyze dataset and identify:
-        - Missing data issues
-        - Inconsistent categorical values
-        - Possible outliers
-        - Data type issues
-        - Any suspicious values
+            Dataset summary:
+            {summary}
 
-        Dataset summary:
-        {summary}
+            Missing values:
+            {missing}
 
-        Provide structured recommendations.
-        """
+            Identify:
+            - Missing handling
+            - Categorical inconsistencies
+            - Duplicates
+            - Data types
+            - Outliers
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a professional data analyst."},
-                {"role": "user", "content": prompt}
-            ]
-        )
+            Provide step-by-step plan.
+            """
 
-        st.write(response.choices[0].message.content)
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a data analyst."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+
+            st.markdown(response.choices[0].message.content)
 
     # ---------------------------
-    # Cleaning Tools
+    # APPLY AI CLEANING
+    # ---------------------------
+    if st.button("Apply AI Cleaning (Auto)"):
+        temp = df.copy()
+
+        temp = standardize_categorical(temp)
+        temp = fix_data_types(temp)
+
+        for col in temp.columns:
+            missing_ratio = temp[col].isnull().mean()
+
+            if missing_ratio < 0.05:
+                if pd.api.types.is_numeric_dtype(temp[col]):
+                    temp[col] = temp[col].fillna(temp[col].mean())
+                else:
+                    temp[col] = temp[col].fillna(temp[col].mode()[0])
+
+            elif missing_ratio < 0.4:
+                if pd.api.types.is_numeric_dtype(temp[col]):
+                    temp[col] = temp[col].fillna(temp[col].median())
+                else:
+                    temp[col] = temp[col].fillna(temp[col].mode()[0])
+
+            elif missing_ratio > 0.6:
+                if temp[col].nunique() < 5:
+                    temp = temp.drop(columns=[col])
+
+        temp = temp.drop_duplicates()
+
+        st.session_state.df = temp
+        st.success("AI cleaning applied successfully.")
+        st.rerun()
+
+    # ---------------------------
+    # MANUAL CLEANING
     # ---------------------------
     st.divider()
-    st.subheader("🛠 Data Cleaning Tools")
+    st.subheader("🛠 Manual Cleaning Tools")
 
     colA, colB, colC, colD = st.columns(4)
 
     if colA.button("Standardize Categories"):
         st.session_state.df = standardize_categorical(df)
-        st.success("Categorical values standardized")
+        st.success("Categorical standardized")
         st.rerun()
 
     if colB.button("Fix Data Types"):
         st.session_state.df = fix_data_types(df)
-        st.success("Data types corrected")
+        st.success("Types fixed")
         st.rerun()
 
     if colC.button("Remove Duplicates"):
@@ -187,13 +227,13 @@ if st.session_state.df is not None:
     outliers = detect_outliers(df)
 
     if outliers:
-        st.warning("Potential outliers found:")
+        st.warning("Potential outliers:")
         st.write(outliers)
     else:
         st.success("No major outliers detected")
 
     # ---------------------------
-    # Insights
+    # AI INSIGHTS
     # ---------------------------
     st.divider()
     st.subheader("🧠 AI Insights")
@@ -202,7 +242,7 @@ if st.session_state.df is not None:
         summary = df.describe(include='all').to_string()
 
         prompt = f"""
-        Analyze this dataset and provide:
+        Analyze dataset and provide:
         - Key trends
         - 3 insights
         - 2 recommendations
@@ -222,12 +262,13 @@ if st.session_state.df is not None:
         st.write(response.choices[0].message.content)
 
     # ---------------------------
-    # Visualization
+    # Visualization (FIXED)
     # ---------------------------
     st.divider()
     st.subheader("📊 Visualization")
 
-    numeric_cols = df.select_dtypes(include='number').columns
+    numeric_cols = df.select_dtypes(include='number').columns.tolist()
+    categorical_cols = df.select_dtypes(include='object').columns.tolist()
 
     if len(numeric_cols) >= 2:
         x = st.selectbox("X-axis", numeric_cols)
@@ -235,6 +276,22 @@ if st.session_state.df is not None:
 
         fig = px.scatter(df, x=x, y=y, trendline="ols")
         st.plotly_chart(fig, use_container_width=True)
+
+    elif len(numeric_cols) == 1:
+        st.info("Only one numeric column → showing distribution")
+        col = numeric_cols[0]
+        fig = px.histogram(df, x=col)
+        st.plotly_chart(fig, use_container_width=True)
+
+    elif len(categorical_cols) > 0:
+        st.info("No numeric data → showing categorical distribution")
+        col = categorical_cols[0]
+        fig = px.bar(df[col].value_counts().reset_index(),
+                     x='index', y=col)
+        st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.warning("No suitable data for visualization.")
 
     # ---------------------------
     # Q&A
