@@ -26,31 +26,23 @@ _SYSTEM_PROMPT = (
 )
 
 _USER_PROMPT_TEMPLATE = """
-Analyze the following dataset metadata and sample data and return a structured JSON cleaning plan.
+Analyze the dataset and return a structured JSON cleaning plan.
 
-Dataset Info:
+Dataset:
 {summary}
 
-Return ONLY a valid JSON object in this exact format:
+Return ONLY JSON:
 {{
-  "summary": "Brief 2-sentence overview of dataset quality",
+  "summary": "Brief dataset quality overview",
   "confidence": 0-100,
   "steps": [
     {{
-      "action": "fill_median" | "fill_mean" | "fill_mode" | "drop_column" | "remove_duplicates" | "fix_dtypes" | "standardize_categories",
-      "column": "column_name or 'all'",
-      "reason": "plain English explanation"
+      "action": "...",
+      "column": "...",
+      "reason": "..."
     }}
   ]
 }}
-
-Rules:
-- Only include steps that are genuinely necessary.
-- Use drop_column only if missing > 60% or the column has no analytical value.
-- fill_median for skewed numerics; fill_mean for normally distributed ones.
-- fill_mode for categorical columns with missing values.
-- Always include remove_duplicates if duplicates > 0.
-- Include fix_dtypes and standardize_categories when relevant.
 """
 
 # ---------------------------
@@ -63,9 +55,15 @@ def is_dataset_messy(df):
     duplicate_ratio = df.duplicated().sum() / len(df) if len(df) > 0 else 0
     object_ratio = len(df.select_dtypes(include="object").columns) / len(df.columns)
 
+    # Absolute counts
+    missing_count = df.isnull().sum().sum()
+    duplicate_count = df.duplicated().sum()
+
     return (
-        missing_ratio > 0.1 or
-        duplicate_ratio > 0.05 or
+        missing_ratio > 0.01 or      # lowered from 0.1
+        missing_count > 5 or         # any meaningful missing values
+        duplicate_ratio > 0.01 or    # lowered from 0.05
+        duplicate_count > 0 or       # any duplicates at all
         object_ratio > 0.6
     )
 
@@ -99,19 +97,12 @@ def _generate_plan(df):
 
         plan = json.loads(raw)
 
-        # Validation
-        if not isinstance(plan, dict):
+        if not isinstance(plan, dict) or "steps" not in plan:
             st.error("Invalid plan format returned by AI.")
-            return
-
-        if "steps" not in plan or not isinstance(plan["steps"], list):
-            st.error("Invalid steps format in AI response.")
             return
 
         st.session_state.pending_plan = plan
 
-    except json.JSONDecodeError as e:
-        st.error(f"AI returned malformed JSON — try again. ({e})")
     except Exception as e:
         st.error(f"AI Error: {e}")
 
@@ -131,112 +122,105 @@ def _render_plan_review(df):
     st.write("**Proposed Steps:**")
 
     for i, step in enumerate(steps, start=1):
-        icon   = _ACTION_ICONS.get(step.get("action"), "•")
-        target = (
-            f" on **{step.get('column')}**"
-            if step.get("column") and step.get("column") != "all"
-            else ""
-        )
+        icon = _ACTION_ICONS.get(step.get("action"), "•")
+        col  = step.get("column")
+
+        target = f" on **{col}**" if col and col != "all" else ""
+
         st.markdown(f"{i}. {icon} `{step.get('action')}`{target} — {step.get('reason')}")
 
-    st.write("")
-    col_approve, col_reject = st.columns(2)
+    col1, col2 = st.columns(2)
 
     # APPROVE
-    with col_approve:
+    with col1:
         if st.button("✅ Approve & Execute Plan", type="primary"):
-            try:
-                with st.spinner("Applying cleaning steps..."):
 
-                    # Save original for evaluation
-                    st.session_state.original_df = df.copy()
+            with st.spinner("Applying cleaning..."):
 
-                    cleaned_df, change_log = apply_cleaning_plan(df, steps)
+                st.session_state.original_df = df.copy()
 
-                st.session_state.df           = cleaned_df
-                st.session_state.change_log   = change_log
-                st.session_state.cleaned      = True
-                st.session_state.pending_plan = None
+                cleaned_df, change_log = apply_cleaning_plan(df, steps)
 
-                st.success("Cleaning plan executed successfully!")
+            st.session_state.df = cleaned_df
+            st.session_state.change_log = change_log
+            st.session_state.cleaned = True
+            st.session_state.pending_plan = None
 
-                # Explainability
-                if change_log:
-                    st.write("### 🧾 What Changed")
-                    for change in change_log:
-                        st.write(f"- {change}")
+            # ✅ KEY ADDITIONS
+            st.session_state.data_quality = "clean"
+            st.session_state.auto_insights = True
 
-                st.rerun()
+            st.success("Cleaning applied!")
 
-            except Exception as e:
-                st.error(f"Processing Error: {e}")
+            if change_log:
+                st.write("### 🧾 Changes")
+                for c in change_log:
+                    st.write(f"- {c}")
+
+            st.rerun()
 
     # REJECT
-    with col_reject:
+    with col2:
         if st.button("❌ Reject Plan"):
             st.session_state.pending_plan = None
-            st.info("Plan discarded. You can regenerate or use manual tools.")
             st.rerun()
 
 # ---------------------------
-# Main Render Function
+# MAIN RENDER
 # ---------------------------
 def render_cleaning_agent(df):
 
     st.subheader("🤖 AI Cleaning Agent")
-    st.caption(
-        "The agent detects messy data, proposes a plan, and executes only after your approval."
-    )
 
-    # Init flags
     if "auto_plan_generated" not in st.session_state:
         st.session_state.auto_plan_generated = False
 
-    # =========================
-    # AUTO GENERATE IF MESSY
-    # =========================
+    # ---------------------------
+    # AUTO DETECT DATA QUALITY
+    # ---------------------------
+    if st.session_state.data_quality == "unknown": 
+
+        if is_dataset_messy(df):
+            st.session_state.data_quality = "unclean"
+            st.session_state.auto_insights = True   # ✅ ADD THIS
+
+        else:
+            st.session_state.data_quality = "clean"
+            st.session_state.auto_insights = True
+
+    # ---------------------------
+    # AUTO PLAN GENERATION
+    # ---------------------------
     if (
-        not st.session_state.get("cleaned", False)
+        st.session_state.data_quality == "unclean"
         and not st.session_state.get("pending_plan")
         and not st.session_state.auto_plan_generated
     ):
-        if is_dataset_messy(df):
-            st.info("⚠️ Dataset appears messy. AI is generating a cleaning plan...")
+        st.info("⚠️ Dataset is messy. Generating cleaning plan...")
 
-            with st.spinner("Analyzing dataset automatically..."):
-                _generate_plan(df)
+        _generate_plan(df)
 
-            st.session_state.auto_plan_generated = True
-            st.rerun()
+        st.session_state.auto_plan_generated = True
+        st.rerun()
 
-    # =========================
+    # ---------------------------
     # MANUAL GENERATE
-    # =========================
-    if not st.session_state.get("cleaned", False):
+    # ---------------------------
+    if st.session_state.data_quality == "unclean":
 
-        if st.button("🔍 Generate Cleaning Plan Manually"):
-            with st.spinner("Analyzing your dataset..."):
+        # ✅ Only show button if no plan is pending AND auto-gen already ran
+        if (
+            not st.session_state.get("pending_plan")
+            and st.session_state.get("auto_plan_generated")
+        ):
+            if st.button("🔍 Generate Cleaning Plan"):
                 _generate_plan(df)
 
     else:
-        st.success("✅ Dataset already cleaned using AI agent.")
+        st.success("✅ Dataset appears clean.")
 
-        col1, col2 = st.columns(2)
-
-        if col1.button("🔄 Re-run AI Cleaning"):
-            st.session_state.cleaned = False
-            st.session_state.pending_plan = None
-            st.session_state.auto_plan_generated = False
-            st.info("You can generate a new plan.")
-            st.rerun()
-
-        if col2.button("📜 View Last Changes"):
-            if st.session_state.get("change_log"):
-                for change in st.session_state.change_log:
-                    st.write(f"- {change}")
-
-    # =========================
+    # ---------------------------
     # SHOW PLAN
-    # =========================
+    # ---------------------------
     if st.session_state.get("pending_plan"):
         _render_plan_review(df)
