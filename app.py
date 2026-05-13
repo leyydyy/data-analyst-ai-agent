@@ -7,50 +7,75 @@ from components.visualization import render_visualization
 from components.qa import render_qa
 
 # ---------------------------
-# INIT
+# PAGE CONFIG
+# ---------------------------
+st.set_page_config(
+    page_title="AI Data Analyst Agent",
+    layout="wide"
+)
+
+# ---------------------------
+# INIT SESSION
 # ---------------------------
 init_session()
-
-st.set_page_config(page_title="AI Data Analyst Agent", layout="wide")
 
 st.title("📊 AI Data Analyst Agent")
 
 # ---------------------------
-# SIDEBAR (UPLOAD)
+# GET DATAFRAME
 # ---------------------------
-render_sidebar()
-df = st.session_state.df
+df = st.session_state.get("df", None)
 
 # ---------------------------
-# MAIN FLOW
+# SHOW UPLOADER IN MAIN SCREEN
+# ONLY WHEN NO DATASET
 # ---------------------------
-if df is not None:
+if df is None:
 
-    st.session_state.df = df
+    st.markdown("## Upload Your Dataset")
 
-    # ---------------------------
-    # DATA PREVIEW
-    # ---------------------------
+    uploaded_file = st.file_uploader(
+        "Upload CSV or Excel File",
+        type=["csv", "xlsx"],
+        key="uploaded_file"
+    )
+
+    if uploaded_file is not None:
+        from utils.file_io import load_uploaded_file
+
+        st.session_state.df = load_uploaded_file(uploaded_file)
+        st.session_state.current_file = uploaded_file.name
+
+        st.rerun()
+
+    st.info("Upload a dataset to begin.")
+
+# ---------------------------
+# MAIN DASHBOARD
+# ---------------------------
+else:
+
+    # show sidebar only after upload
+    render_sidebar()
+
     st.subheader("📄 Data Preview")
+
     st.dataframe(df.head())
 
     col1, col2, col3 = st.columns(3)
 
     col1.metric("Rows", len(df))
-    col2.metric("Missing", df.isnull().sum().sum())
-    col3.metric("Duplicates", df.duplicated().sum())
+    col2.metric("Missing", int(df.isnull().sum().sum()))
+    col3.metric("Duplicates", int(df.duplicated().sum()))
 
     # CLEANING AGENT
-    render_cleaning_agent(st.session_state.df)
+    render_cleaning_agent(df)
 
-    # INSIGHTS (AUTO + MANUAL)
-    render_insights(st.session_state.df)
+    # INSIGHTS
+    render_insights(df)
 
     # VISUALIZATION
-    render_visualization(st.session_state.df)
+    render_visualization(df)
 
     # Q&A
-    render_qa(st.session_state.df)
-
-else:
-    st.info("Upload a dataset to begin.")
+    render_qa(df)
