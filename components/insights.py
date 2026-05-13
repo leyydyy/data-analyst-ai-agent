@@ -5,8 +5,6 @@ from utils.data_summary import build_dataset_summary
 
 def render_insights(df):
 
-    st.subheader("🧠 AI Insights")
-
     quality = st.session_state.get("data_quality", "unknown")
     cleaned = st.session_state.get("cleaned", False)
 
