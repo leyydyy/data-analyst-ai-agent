@@ -4,9 +4,17 @@ from config import client
 from utils.data_summary import build_dataset_summary
 
 _SYSTEM_PROMPT = (
-    "You are a data analyst. Answer the user's question using ONLY "
-    "the dataset information provided. If the answer cannot be determined "
-    "from the data, say so clearly. Be concise and specific."
+    "You are a data analyst assistant. Your ONLY job is to answer factual questions "
+    "about the dataset provided — such as summarizing values, identifying trends, "
+    "comparing figures, or explaining what the data shows.\n\n"
+    "You must REFUSE any request that asks you to:\n"
+    "- Write, generate, or explain code in any language\n"
+    "- Create scripts, functions, or programs\n"
+    "- Perform tasks unrelated to interpreting the dataset\n"
+    "- Give instructions on how to do something programmatically\n\n"
+    "If the user asks for code or anything outside of dataset analysis, respond with:\n"
+    "'I can only answer questions about the dataset. I cannot perform tasks outside of data interpretation.'\n\n"
+    "If the answer cannot be determined from the data, say so clearly. Be concise and specific."
 )
 
 _USER_PROMPT_TEMPLATE = """
@@ -19,7 +27,6 @@ Question: {question}
 
 def render_qa(df):
     """Draw the Q&A section for the given DataFrame."""
-    st.subheader("❓ Ask Questions About Your Data")
 
     question = st.text_input("Ask anything about your dataset")
 
