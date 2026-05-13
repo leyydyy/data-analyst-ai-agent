@@ -57,7 +57,7 @@ def render_sidebar():
         )
 
         st.sidebar.download_button(
-            label="⬇Download Cleaned CSV",
+            label="Download Cleaned Dataset",
             data=csv_bytes,
             file_name=filename,
             mime="text/csv",
