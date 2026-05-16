@@ -29,7 +29,7 @@ def render_insights(df):
                 "more reliable results."
             )
         else:
-            st.success("🤖 Automatically generating insights from clean data...")
+            st.success("Generating insights from data")
 
         _generate_insights(df)
 
@@ -38,7 +38,7 @@ def render_insights(df):
     # =========================
     # MANUAL BUTTON
     # =========================
-    if st.button("🔄 Regenerate Insights"):
+    if st.button("Regenerate Insights"):
         _generate_insights(df)
 
 

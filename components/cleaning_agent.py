@@ -4,9 +4,7 @@ from config import client
 from utils.data_summary import build_dataset_summary
 from utils.cleaning import apply_cleaning_plan, _ALLOWED_ACTIONS
 
-# ---------------------------
 # Icons
-# ---------------------------
 _ACTION_ICONS = {
     "drop_column":            "🗑️",
     "fill_median":            "📊",
@@ -19,9 +17,7 @@ _ACTION_ICONS = {
     "standardize_dates":      "📅",
 }
 
-# ---------------------------
 # Prompts — Plan generation
-# ---------------------------
 _SYSTEM_PROMPT = (
     "You are a precise data cleaning agent. Output only valid JSON — "
     "no markdown, no explanation, no code fences."
@@ -64,9 +60,7 @@ Return ONLY JSON:
 }}
 """
 
-# ---------------------------
 # Prompts — Code-gen fallback
-# ---------------------------
 _CODEGEN_SYSTEM = (
     "You are a pandas code generation expert. "
     "Output only valid Python code — no markdown, no explanation, no code fences. "
@@ -96,10 +90,7 @@ Rules:
 """
 
 
-# ---------------------------
 # Code-gen fallback function
-# (injected into apply_cleaning_plan)
-# ---------------------------
 def _request_codegen(step: dict, df) -> str | None:
     """
     Ask the AI to write a pandas snippet for a step whose action is not
@@ -136,9 +127,7 @@ def _request_codegen(step: dict, df) -> str | None:
         return None
 
 
-# ---------------------------
 # Messiness Detection
-# ---------------------------
 def is_dataset_messy(df):
     total_cells     = df.shape[0] * df.shape[1]
     missing_ratio   = df.isnull().sum().sum() / total_cells if total_cells > 0 else 0
@@ -156,9 +145,7 @@ def is_dataset_messy(df):
     )
 
 
-# ---------------------------
 # Generate Plan
-# ---------------------------
 def _generate_plan(df):
     summary = build_dataset_summary(df)
 
@@ -198,9 +185,7 @@ def _generate_plan(df):
         st.error(f"AI Error: {e}")
 
 
-# ---------------------------
 # Render Plan Review
-# ---------------------------
 def _render_plan_review(df):
     plan  = st.session_state.pending_plan
     steps = plan.get("steps", [])
@@ -214,7 +199,7 @@ def _render_plan_review(df):
     custom_count = sum(1 for s in steps if s.get("_is_custom"))
     if custom_count:
         st.info(
-            f"🤖 {custom_count} step(s) use a custom action not in the built-in list. "
+            f"{custom_count} step(s) use a custom action not in the built-in list. "
             "The AI will generate pandas code for these when you approve."
         )
 
@@ -254,15 +239,6 @@ def _render_plan_review(df):
                     codegen_fn=_request_codegen,
                 )
 
-
-                # TEMP DEBUG — remove after fixing
-                st.write("### 🔍 Debug: Change Log")
-                st.write(change_log)
-                st.write("### 🔍 Debug: Cleaned DF (first 5 rows)")
-                st.dataframe(cleaned_df.head())
-                st.write("### 🔍 Debug: Missing values after cleaning")
-                st.write(cleaned_df.isnull().sum())
-
             st.session_state.df            = cleaned_df
             st.session_state.change_log    = change_log
             st.session_state.cleaned       = True
@@ -285,12 +261,8 @@ def _render_plan_review(df):
             st.session_state.pending_plan = None
             st.rerun()
 
-
-# ---------------------------
 # MAIN RENDER
-# ---------------------------
 def render_cleaning_agent(df):
-    st.subheader("🤖 AI Cleaning Agent")
 
     if "auto_plan_generated" not in st.session_state:
         st.session_state.auto_plan_generated = False
@@ -310,7 +282,7 @@ def render_cleaning_agent(df):
         and not st.session_state.get("pending_plan")
         and not st.session_state.auto_plan_generated
     ):
-        st.info("⚠️ Dataset is messy. Generating cleaning plan…")
+        st.info("⚠️ Dataset is messy. Generating cleaning plan")
         _generate_plan(df)
         st.session_state.auto_plan_generated = True
         st.rerun()
@@ -321,11 +293,11 @@ def render_cleaning_agent(df):
             not st.session_state.get("pending_plan")
             and st.session_state.get("auto_plan_generated")
         ):
-            if st.button("🔍 Generate Cleaning Plan"):
+            if st.button("Generate Cleaning Plan"):
                 _generate_plan(df)
 
     else:
-        st.success("✅ Dataset appears clean.")
+        st.success("Dataset appears clean.")
 
     # SHOW PLAN
     if st.session_state.get("pending_plan"):

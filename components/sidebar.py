@@ -1,29 +1,30 @@
 import streamlit as st
+import os
+import pickle
 from utils.file_io import to_csv_bytes, make_export_filename
+
+CACHE_PATH = "/tmp/analyst_agent_cache.pkl"
+
+def clear_cache():
+    if os.path.exists(CACHE_PATH):
+        os.remove(CACHE_PATH)
 
 def render_sidebar():
     st.sidebar.title("Dataset Controls")
 
-    # ---------------------------
     # DATASET INFO
-    # ---------------------------
     st.sidebar.success(
         f"Loaded: {st.session_state.get('current_file', 'Dataset')}"
     )
 
-    # Show a cleaned badge if applicable
     if st.session_state.get("cleaned"):
         st.sidebar.success("Dataset has been cleaned!")
 
     st.sidebar.divider()
 
-    # ---------------------------
-    # RESET BUTTON
-    # ---------------------------
-    if st.sidebar.button(
-        "Load Different Dataset",
-        use_container_width=True
-    ):
+    # LOAD DIFFERENT DATASET
+    if st.sidebar.button("Load Different Dataset", use_container_width=True):
+        clear_cache()  # ← clears disk so data isn't restored on rerun
         keys_to_clear = [
             "df",
             "uploaded_file",
@@ -35,20 +36,21 @@ def render_sidebar():
             "auto_plan_generated",
             "auto_insights",
             "data_quality",
+            "insights_generated",
+            "active_tab",
+            "cleaning_done",
+            "tab_switched",
         ]
         for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
 
-    # ---------------------------
     # EXPORT
-    # ---------------------------
     if st.session_state.get("cleaned"):
         st.sidebar.divider()
         st.sidebar.subheader("Export Data")
 
-        # ✅ Always export from st.session_state.df (the live, cleaned df)
         export_df = st.session_state.df
 
         csv_bytes = to_csv_bytes(export_df)
@@ -64,7 +66,6 @@ def render_sidebar():
             use_container_width=True,
         )
 
-        # Show a quick summary of what was cleaned
         if st.session_state.get("change_log"):
             with st.sidebar.expander("View Change Log"):
                 for entry in st.session_state.change_log:

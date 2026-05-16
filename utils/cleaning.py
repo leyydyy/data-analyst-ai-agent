@@ -1,20 +1,12 @@
 import pandas as pd
 
-
-# ---------------------------------------------------------------------------
 # Sanitization
-# ---------------------------------------------------------------------------
-
 def sanitize_data(df: pd.DataFrame) -> pd.DataFrame:
     """Replace common junk/null-like strings with pd.NA."""
     junk_values = ["", " ", "NULL", "null", "?", "N/A", "n/a", "NA"]
     return df.replace(junk_values, pd.NA)
 
-
-# ---------------------------------------------------------------------------
 # Standardization
-# ---------------------------------------------------------------------------
-
 def standardize_categorical(
     df: pd.DataFrame,
     col: str | None = None,
@@ -56,11 +48,7 @@ def standardize_categorical(
 
     return df
 
-
-# ---------------------------------------------------------------------------
 # Type inference
-# ---------------------------------------------------------------------------
-
 def fix_data_types(
     df: pd.DataFrame,
     col: str | None = None,
@@ -120,10 +108,7 @@ def fix_data_types(
     return df
 
 
-# ---------------------------------------------------------------------------
 # Date standardization
-# ---------------------------------------------------------------------------
-
 def standardize_dates(
     df: pd.DataFrame,
     col: str,
@@ -149,10 +134,7 @@ def standardize_dates(
     return df
 
 
-# ---------------------------------------------------------------------------
 # Outlier detection
-# ---------------------------------------------------------------------------
-
 def detect_outliers(df: pd.DataFrame) -> dict:
     """IQR-based outlier detection. Returns {col: count}."""
     report = {}
@@ -166,10 +148,7 @@ def detect_outliers(df: pd.DataFrame) -> dict:
     return report
 
 
-# ---------------------------------------------------------------------------
-# Code-gen fallback — sandbox executor
-# ---------------------------------------------------------------------------
-
+# Code-gen fallback sandbox executor
 def _run_codegen_step(
     df: pd.DataFrame,
     code: str,
@@ -187,7 +166,7 @@ def _run_codegen_step(
     col    = step.get("column", "")
     reason = step.get("reason", "")
 
-    # Restricted globals — no builtins that could do harm
+    # Restricted globals  
     sandbox = {
         "__builtins__": {
             # whitelist only safe builtins
@@ -196,12 +175,12 @@ def _run_codegen_step(
             "isinstance": isinstance, "enumerate": enumerate, "zip": zip,
         },
         "pd": pd,
-        "df": df.copy(),   # operate on a copy so failures are non-destructive
+        "df": df.copy(), # operate on a copy so failures are non-destructive
     }
 
     try:
-        exec(code, sandbox)                          # run the generated code
-        result = sandbox.get("df")                   # retrieve the (possibly modified) df
+        exec(code, sandbox) # run the generated code
+        result = sandbox.get("df") # retrieve the (possibly modified) df
 
         if not isinstance(result, pd.DataFrame):
             raise ValueError("AI code did not produce a DataFrame named `df`.")
@@ -222,10 +201,7 @@ def _run_codegen_step(
         return df   # return original df untouched
 
 
-# ---------------------------------------------------------------------------
 # Allowed built-in actions
-# ---------------------------------------------------------------------------
-
 _ALLOWED_ACTIONS = {
     "drop_column",
     "fill_median",
@@ -238,27 +214,6 @@ _ALLOWED_ACTIONS = {
     "standardize_dates",
 }
 
-
-# ---------------------------------------------------------------------------
-# Agentic plan executor
-# ---------------------------------------------------------------------------
-
-# Safe execution order — regardless of what order the AI returns steps,
-# we always run them in this sequence to prevent inter-step conflicts:
-#
-#   1. fix_dtypes / standardize_dates  — cast columns to correct types FIRST
-#                                        so numeric fills get real numbers,
-#                                        not strings
-#   2. standardize_categories          — normalize text BEFORE filling so the
-#                                        mode/fill value matches clean values
-#   3. remove_duplicates               — remove dupes before filling to avoid
-#                                        inflating fill statistics
-#   4. fill_*                          — fill missing values on clean, typed data
-#   5. fill_constant                   — string fills after numeric fills
-#   6. drop_column                     — drop last so fills don't target a
-#                                        column that was meant to be dropped
-#   7. custom (codegen)                — run last since they may depend on
-#                                        prior steps having cleaned the data
 _EXECUTION_ORDER = [
     "fix_dtypes",
     "standardize_dates",
