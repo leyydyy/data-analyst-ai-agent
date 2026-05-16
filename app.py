@@ -13,7 +13,6 @@ from components.qa import render_qa
 st.set_page_config(
     page_title="AI Data Analyst Agent",
     layout="wide",
-    page_icon="📊"
 )
 
 # GLOBAL STYLES
@@ -117,7 +116,7 @@ if st.session_state.get("df") is None:
             save_to_cache(df_loaded, uploaded_file.name, st.session_state.insights_generated)
 
             st.rerun()
-        st.info("📁 Supported formats: CSV, XLSX", icon=None)
+        st.info("Supported formats: CSV, XLSX", icon=None)
 
 # MAIN DASHBOARD
 else:
@@ -164,20 +163,8 @@ else:
     with tab1:
         render_cleaning_agent(df)
 
-        if st.session_state.get("cleaning_done") and not st.session_state.get("tab_switched"):
-            st.session_state.active_tab = 1
-            st.session_state.insights_generated = True
-            st.session_state.tab_switched = True
-            # Update cache with new cleaned df and unlocked state
-            save_to_cache(df, st.session_state.get("current_file", "dataset"), True)
-            st.rerun()
-
     # Tab 2: Visuals & Insights 
     with tab2:
-        if not visuals_ready:
-            st.warning("⏳ Complete or skip data cleaning first, then generate insights to unlock this tab.")
-            st.stop()
-
         st.subheader("📈 Visualization")
         render_visualization(df)
 

@@ -8,18 +8,13 @@ def render_insights(df):
     quality = st.session_state.get("data_quality", "unknown")
     cleaned = st.session_state.get("cleaned", False)
 
-    # =========================
     # WARNINGS
-    # =========================
-
     st.info(
         "ℹ️ AI-generated insights may contain errors. "
         "Always validate results before making decisions."
     )
 
-    # =========================
     # AUTO INSIGHTS
-    # =========================
     if st.session_state.get("auto_insights", False):
 
         if quality == "unclean":
@@ -35,9 +30,7 @@ def render_insights(df):
 
         st.session_state.auto_insights = False
 
-    # =========================
     # MANUAL BUTTON
-    # =========================
     if st.button("Regenerate Insights"):
         _generate_insights(df)
 
