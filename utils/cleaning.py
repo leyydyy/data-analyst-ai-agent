@@ -22,7 +22,6 @@ def standardize_categorical(
 ) -> pd.DataFrame:
     """
     Strip whitespace, lowercase, and normalize common boolean-like strings.
-
     If `col` is given, only that column is touched.
     If `col` is None (or "all"), every object column is processed.
     """
@@ -46,16 +45,14 @@ def standardize_categorical(
                 "no":      "no",  "n":     "no",  "0": "no",  "false": "no",
                 "x":       pd.NA,
                 "unknown": pd.NA,
-                "nan":     pd.NA,   # str(pd.NA) artefact
+                "nan":     pd.NA,
             }
         )
         if not df[c].equals(before):
             changed_cols.append(c)
 
     if log is not None and changed_cols:
-        log.append(
-            f"✏️ Standardized categorical values in: {', '.join(changed_cols)}"
-        )
+        log.append(f"✏️ Standardized categorical values in: {', '.join(changed_cols)}")
 
     return df
 
@@ -72,14 +69,12 @@ def fix_data_types(
 ) -> pd.DataFrame:
     """
     Attempt to infer / cast better dtypes.
-
-    If `col` + `dtype` are provided (from an AI step), cast that column
-    explicitly.  Otherwise fall back to auto-inference across all columns.
+    If `col` + `dtype` are provided, cast that column explicitly.
+    Otherwise fall back to auto-inference across all columns.
     """
     df = df.copy()
     fixed = []
 
-    # --- Explicit cast requested by the AI ---
     if col and col != "all" and col in df.columns and dtype:
         try:
             if "datetime" in dtype:
@@ -101,10 +96,8 @@ def fix_data_types(
             log.append(f"🔧 Fixed data types: {'; '.join(fixed)}")
         return df
 
-    # --- Auto-inference across all columns ---
     for c in df.columns:
         original_dtype = str(df[c].dtype)
-
         try:
             converted = pd.to_numeric(df[c], errors="ignore")
             if str(converted.dtype) != original_dtype:
@@ -113,7 +106,6 @@ def fix_data_types(
                 continue
         except Exception:
             pass
-
         try:
             converted = pd.to_datetime(df[c], errors="ignore")
             if str(converted.dtype) != original_dtype:
@@ -129,7 +121,7 @@ def fix_data_types(
 
 
 # ---------------------------------------------------------------------------
-# Date standardization  (NEW)
+# Date standardization
 # ---------------------------------------------------------------------------
 
 def standardize_dates(
@@ -137,22 +129,16 @@ def standardize_dates(
     col: str,
     log: list | None = None,
 ) -> pd.DataFrame:
-    """
-    Parse a column that contains mixed date formats and normalise every value
-    to ISO-8601 strings (YYYY-MM-DD).  Unparseable values become NaT / NaN.
-    """
+    """Parse mixed date formats and normalise to YYYY-MM-DD strings."""
     if col not in df.columns:
         return df
 
     df = df.copy()
     before_nulls = df[col].isnull().sum()
-
-    df[col] = pd.to_datetime(df[col], infer_datetime_format=True, errors="coerce")
+    df[col]      = pd.to_datetime(df[col], infer_datetime_format=True, errors="coerce")
     after_nulls  = df[col].isnull().sum()
     coerced      = int(after_nulls - before_nulls)
-
-    # Store as plain date strings so exports stay human-readable
-    df[col] = df[col].dt.strftime("%Y-%m-%d")
+    df[col]      = df[col].dt.strftime("%Y-%m-%d")
 
     msg = f"📅 Standardized dates in **{col}** to YYYY-MM-DD"
     if coerced:
@@ -168,15 +154,12 @@ def standardize_dates(
 # ---------------------------------------------------------------------------
 
 def detect_outliers(df: pd.DataFrame) -> dict:
-    """
-    Use the IQR method to identify outliers in numeric columns.
-    Returns {column_name: outlier_count} for columns that have outliers.
-    """
+    """IQR-based outlier detection. Returns {col: count}."""
     report = {}
     for col in df.select_dtypes(include="number").columns:
-        Q1  = df[col].quantile(0.25)
-        Q3  = df[col].quantile(0.75)
-        IQR = Q3 - Q1
+        Q1   = df[col].quantile(0.25)
+        Q3   = df[col].quantile(0.75)
+        IQR  = Q3 - Q1
         mask = (df[col] < Q1 - 1.5 * IQR) | (df[col] > Q3 + 1.5 * IQR)
         if mask.any():
             report[col] = int(mask.sum())
@@ -184,10 +167,65 @@ def detect_outliers(df: pd.DataFrame) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Agentic plan executor
+# Code-gen fallback — sandbox executor
 # ---------------------------------------------------------------------------
 
-# Full set of actions the AI is allowed to emit (mirrors cleaning_agent.py)
+def _run_codegen_step(
+    df: pd.DataFrame,
+    code: str,
+    step: dict,
+    log: list,
+) -> pd.DataFrame:
+    """
+    Safely execute AI-generated pandas code inside a restricted sandbox.
+
+    The sandbox exposes only `df` and `pd`. The code MUST assign its result
+    back to `df`. Any exception is caught, logged, and the original df is
+    returned unchanged so one bad step never breaks the whole plan.
+    """
+    action = step.get("action", "custom")
+    col    = step.get("column", "")
+    reason = step.get("reason", "")
+
+    # Restricted globals — no builtins that could do harm
+    sandbox = {
+        "__builtins__": {
+            # whitelist only safe builtins
+            "len": len, "range": range, "int": int, "float": float,
+            "str": str, "list": list, "dict": dict, "print": print,
+            "isinstance": isinstance, "enumerate": enumerate, "zip": zip,
+        },
+        "pd": pd,
+        "df": df.copy(),   # operate on a copy so failures are non-destructive
+    }
+
+    try:
+        exec(code, sandbox)                          # run the generated code
+        result = sandbox.get("df")                   # retrieve the (possibly modified) df
+
+        if not isinstance(result, pd.DataFrame):
+            raise ValueError("AI code did not produce a DataFrame named `df`.")
+
+        log.append(
+            f"🤖 Custom code applied for `{action}`"
+            + (f" on **{col}**" if col and col != "all" else "")
+            + f" — {reason}"
+        )
+        return result
+
+    except Exception as e:
+        log.append(
+            f"⚠️ Code-gen fallback failed for `{action}`"
+            + (f" on '{col}'" if col else "")
+            + f": {e}"
+        )
+        return df   # return original df untouched
+
+
+# ---------------------------------------------------------------------------
+# Allowed built-in actions
+# ---------------------------------------------------------------------------
+
 _ALLOWED_ACTIONS = {
     "drop_column",
     "fill_median",
@@ -201,127 +239,194 @@ _ALLOWED_ACTIONS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Agentic plan executor
+# ---------------------------------------------------------------------------
+
+# Safe execution order — regardless of what order the AI returns steps,
+# we always run them in this sequence to prevent inter-step conflicts:
+#
+#   1. fix_dtypes / standardize_dates  — cast columns to correct types FIRST
+#                                        so numeric fills get real numbers,
+#                                        not strings
+#   2. standardize_categories          — normalize text BEFORE filling so the
+#                                        mode/fill value matches clean values
+#   3. remove_duplicates               — remove dupes before filling to avoid
+#                                        inflating fill statistics
+#   4. fill_*                          — fill missing values on clean, typed data
+#   5. fill_constant                   — string fills after numeric fills
+#   6. drop_column                     — drop last so fills don't target a
+#                                        column that was meant to be dropped
+#   7. custom (codegen)                — run last since they may depend on
+#                                        prior steps having cleaned the data
+_EXECUTION_ORDER = [
+    "fix_dtypes",
+    "standardize_dates",
+    "standardize_categories",
+    "remove_duplicates",
+    "fill_median",
+    "fill_mean",
+    "fill_mode",
+    "fill_constant",
+    "drop_column",
+    # anything not in this list (custom/codegen) runs at the end
+]
+
+
+def _sort_steps(steps: list) -> list:
+    """
+    Sort plan steps into the safe execution order defined above.
+    Steps with unrecognised actions (codegen) are appended at the end.
+    """
+    def sort_key(step):
+        action = step.get("action", "").strip().lower()
+        try:
+            return _EXECUTION_ORDER.index(action)
+        except ValueError:
+            return len(_EXECUTION_ORDER)   # custom steps go last
+
+    return sorted(steps, key=sort_key)
+
+
+def _execute_step(temp: pd.DataFrame, step: dict, log: list) -> pd.DataFrame:
+    """Execute a single built-in cleaning step. Returns updated df."""
+    action = step.get("action", "").strip().lower()
+    col    = step.get("column", "")
+    reason = step.get("reason", "")
+
+    if action == "drop_column":
+        if col in temp.columns:
+            temp = temp.drop(columns=[col])
+            log.append(f"🗑️ Dropped column **{col}** — {reason}")
+
+    elif action == "fill_median":
+        if col in temp.columns:
+            temp[col] = pd.to_numeric(temp[col], errors="coerce")
+            if pd.api.types.is_numeric_dtype(temp[col]):
+                median_val    = temp[col].median()
+                missing_count = temp[col].isnull().sum()
+                temp[col]     = temp[col].fillna(median_val)
+                log.append(
+                    f"📊 Filled {missing_count} missing in **{col}** "
+                    f"with median ({median_val:.2f}) — {reason}"
+                )
+
+    elif action == "fill_mean":
+        if col in temp.columns:
+            temp[col] = pd.to_numeric(temp[col], errors="coerce")
+            if pd.api.types.is_numeric_dtype(temp[col]):
+                mean_val      = temp[col].mean()
+                missing_count = temp[col].isnull().sum()
+                temp[col]     = temp[col].fillna(mean_val)
+                log.append(
+                    f"📊 Filled {missing_count} missing in **{col}** "
+                    f"with mean ({mean_val:.2f}) — {reason}"
+                )
+
+    elif action == "fill_mode":
+        if col in temp.columns:
+            mode_vals = temp[col].mode()
+            if not mode_vals.empty:
+                missing_count = temp[col].isnull().sum()
+                temp[col]     = temp[col].fillna(mode_vals[0])
+                log.append(
+                    f"📊 Filled {missing_count} missing in **{col}** "
+                    f"with mode ('{mode_vals[0]}') — {reason}"
+                )
+
+    elif action == "fill_constant":
+        if col in temp.columns:
+            value         = step.get("value", "Unknown")
+            missing_count = temp[col].isnull().sum()
+            temp[col]     = temp[col].fillna(value)
+            log.append(
+                f"📝 Filled {missing_count} missing in **{col}** "
+                f"with '{value}' — {reason}"
+            )
+
+    elif action == "remove_duplicates":
+        before  = len(temp)
+        temp    = temp.drop_duplicates()
+        removed = before - len(temp)
+        log.append(f"🔁 Removed {removed} duplicate rows — {reason}")
+
+    elif action == "fix_dtypes":
+        temp = fix_data_types(
+            temp,
+            col=col if col != "all" else None,
+            dtype=step.get("dtype"),
+            log=log,
+        )
+
+    elif action == "standardize_categories":
+        temp = standardize_categorical(
+            temp,
+            col=col if col != "all" else None,
+            log=log,
+        )
+
+    elif action == "standardize_dates":
+        if col and col != "all":
+            temp = standardize_dates(temp, col=col, log=log)
+
+    return temp
+
+
 def apply_cleaning_plan(
     df: pd.DataFrame,
     plan_steps: list,
+    codegen_fn=None,
 ) -> tuple[pd.DataFrame, list]:
     """
     Execute a structured cleaning plan produced by the AI agent.
 
-    Each step is a dict with AT LEAST:
-        "action"  – one of _ALLOWED_ACTIONS
+    Steps are automatically reordered into a safe execution sequence
+    regardless of the order the AI returned them in, preventing issues
+    like filling nulls before fixing dtypes, or standardizing categories
+    after filling with unstandardized values.
+
+    Each step dict must have at least:
+        "action"  – one of _ALLOWED_ACTIONS, or anything else → codegen fallback
         "column"  – target column name, or "all" for row-level ops
         "reason"  – plain-English explanation (logged)
 
     Optional keys:
         "value"   – used by fill_constant
-        "dtype"   – used by fix_dtypes  (e.g. "datetime64", "float", "int")
+        "dtype"   – used by fix_dtypes
 
     Returns (cleaned_df, change_log).
     """
     temp = df.copy()
     log  = []
 
-    for step in plan_steps:
+    # Reorder steps into safe execution sequence
+    ordered_steps = _sort_steps(plan_steps)
+
+    # Log the reordered sequence so the UI can show it
+    log.append(
+        "📋 Execution order: "
+        + " → ".join(s.get("action", "?") for s in ordered_steps)
+    )
+
+    for step in ordered_steps:
         action = step.get("action", "").strip().lower()
         col    = step.get("column", "")
-        reason = step.get("reason", "")
-
-        # Skip anything that slipped past the prompt guard
-        if action not in _ALLOWED_ACTIONS:
-            log.append(f"⚠️ Skipped unrecognised action '{action}' on '{col}'")
-            continue
 
         try:
-            # ── Drop column ────────────────────────────────────────────────
-            if action == "drop_column":
-                if col in temp.columns:
-                    temp = temp.drop(columns=[col])
-                    log.append(f"🗑️ Dropped column **{col}** — {reason}")
-
-            # ── Fill with median ───────────────────────────────────────────
-            elif action == "fill_median":
-                if col in temp.columns:
-                    # Coerce to numeric first in case the column is stored as object
-                    temp[col] = pd.to_numeric(temp[col], errors="coerce")
-                    if pd.api.types.is_numeric_dtype(temp[col]):
-                        median_val    = temp[col].median()
-                        missing_count = temp[col].isnull().sum()
-                        temp[col]     = temp[col].fillna(median_val)
-                        log.append(
-                            f"📊 Filled {missing_count} missing in **{col}** "
-                            f"with median ({median_val:.2f}) — {reason}"
-                        )
-
-            # ── Fill with mean ─────────────────────────────────────────────
-            elif action == "fill_mean":
-                if col in temp.columns:
-                    temp[col] = pd.to_numeric(temp[col], errors="coerce")
-                    if pd.api.types.is_numeric_dtype(temp[col]):
-                        mean_val      = temp[col].mean()
-                        missing_count = temp[col].isnull().sum()
-                        temp[col]     = temp[col].fillna(mean_val)
-                        log.append(
-                            f"📊 Filled {missing_count} missing in **{col}** "
-                            f"with mean ({mean_val:.2f}) — {reason}"
-                        )
-
-            # ── Fill with mode ─────────────────────────────────────────────
-            elif action == "fill_mode":
-                if col in temp.columns:
-                    mode_vals = temp[col].mode()
-                    if not mode_vals.empty:
-                        missing_count = temp[col].isnull().sum()
-                        temp[col]     = temp[col].fillna(mode_vals[0])
-                        log.append(
-                            f"📊 Filled {missing_count} missing in **{col}** "
-                            f"with mode ('{mode_vals[0]}') — {reason}"
-                        )
-
-            # ── Fill with constant  (NEW) ──────────────────────────────────
-            elif action == "fill_constant":
-                if col in temp.columns:
-                    # AI can suggest a value; fall back to "Unknown" for strings
-                    value         = step.get("value", "Unknown")
-                    missing_count = temp[col].isnull().sum()
-                    temp[col]     = temp[col].fillna(value)
-                    log.append(
-                        f"📝 Filled {missing_count} missing in **{col}** "
-                        f"with '{value}' — {reason}"
-                    )
-
-            # ── Remove duplicates ──────────────────────────────────────────
-            elif action == "remove_duplicates":
-                before  = len(temp)
-                temp    = temp.drop_duplicates()
-                removed = before - len(temp)
-                log.append(f"🔁 Removed {removed} duplicate rows — {reason}")
-
-            # ── Fix data types ─────────────────────────────────────────────
-            elif action == "fix_dtypes":
-                # Pass col + dtype hint when available so we cast precisely
-                temp = fix_data_types(
-                    temp,
-                    col=col if col != "all" else None,
-                    dtype=step.get("dtype"),
-                    log=log,
-                )
-
-            # ── Standardize categories ─────────────────────────────────────
-            elif action == "standardize_categories":
-                # Now targets ONLY the specified column, not every object col
-                temp = standardize_categorical(
-                    temp,
-                    col=col if col != "all" else None,
-                    log=log,
-                )
-
-            # ── Standardize dates  (NEW) ───────────────────────────────────
-            elif action == "standardize_dates":
-                if col and col != "all":
-                    temp = standardize_dates(temp, col=col, log=log)
+            if action not in _ALLOWED_ACTIONS:
+                # Unknown action → codegen fallback
+                if codegen_fn is not None:
+                    code = codegen_fn(step, temp)
+                    if code:
+                        temp = _run_codegen_step(temp, code, step, log)
+                    else:
+                        log.append(f"⚠️ Code-gen returned nothing for `{action}` on '{col}' — skipped")
+                else:
+                    log.append(f"⚠️ Skipped unrecognised action `{action}` on '{col}' (no codegen available)")
+            else:
+                temp = _execute_step(temp, step, log)
 
         except Exception as e:
-            log.append(f"⚠️ Skipped step '{action}' on '{col}': {e}")
+            log.append(f"⚠️ Skipped step `{action}` on '{col}': {e}")
 
     return temp, log
