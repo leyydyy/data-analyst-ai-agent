@@ -11,33 +11,24 @@ from dotenv import load_dotenv
 import streamlit as st
 
 load_dotenv()
-
-# ---------------------------
 # OpenAI Client
-# ---------------------------
 client = OpenAI()
 
-# ---------------------------
 # Session Defaults
-# ---------------------------
 SESSION_DEFAULTS = {
     "df": None,                 # Active DataFrame
     "current_file": None,       # Uploaded filename
     "cleaned": False,           # Whether cleaning has been applied
     "pending_plan": None,       # AI cleaning plan
     "change_log": [],           # Explainability log
-
-    # 🔥 NEW (for agent workflow)
     "original_df": None,        # Before cleaning
     "auto_plan_generated": False,
     "auto_insights": False,
-    "data_quality": "unknown",  # clean | unclean | unknown
+    "data_quality": "unknown",
+    "insights_generated": False,
 }
 
-
-# ---------------------------
 # Initialize Session State
-# ---------------------------
 def init_session_state():
     """Initialize all session state keys that are not yet set."""
     for key, val in SESSION_DEFAULTS.items():
@@ -45,9 +36,6 @@ def init_session_state():
             st.session_state[key] = val
 
 
-# ---------------------------
-# ✅ ALIAS FIX (IMPORTANT)
-# ---------------------------
 def init_session():
     """
     Alias for compatibility with app.py.

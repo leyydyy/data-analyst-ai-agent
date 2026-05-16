@@ -245,6 +245,7 @@ def _render_plan_review(df):
             st.session_state.pending_plan  = None
             st.session_state.data_quality  = "clean"
             st.session_state.auto_insights = True
+            st.session_state.insights_generated = True
 
             st.success("Cleaning applied successfully!")
 
@@ -275,6 +276,7 @@ def render_cleaning_agent(df):
         else:
             st.session_state.data_quality  = "clean"
             st.session_state.auto_insights = True
+            st.session_state.insights_generated = True
 
     # AUTO PLAN GENERATION
     if (

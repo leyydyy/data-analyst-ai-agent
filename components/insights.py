@@ -2,7 +2,6 @@ import streamlit as st
 from config import client
 from utils.data_summary import build_dataset_summary
 
-
 def render_insights(df):
 
     quality = st.session_state.get("data_quality", "unknown")
