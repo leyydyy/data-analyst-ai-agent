@@ -13,16 +13,19 @@ def render_visualization(df):
         "If a chart looks wrong, the source data may still need manual review."
     )
 
-    # Warn if the dataset hasn't been cleaned yet
-    if (
-        st.session_state.get("data_quality") == "unclean"
-        and not st.session_state.get("cleaned", False)
-    ):
+    quality = st.session_state.get("data_quality", "unknown")
+    cleaned = st.session_state.get("cleaned", False)
+
+    if quality == "unclean" and not cleaned:
         st.warning(
             "⚠️ These visuals are based on raw, unclean data and may be "
             "inaccurate. Consider approving the cleaning plan above for "
             "more reliable results."
         )
+    elif cleaned:
+        st.success("Rendering charts from your cleaned dataset.")
+    elif quality == "clean":
+        st.success("Dataset looks clean — rendering charts.")
 
     # Column classification 
     numeric_cols     = df.select_dtypes(include="number").columns.tolist()
@@ -33,7 +36,6 @@ def render_visualization(df):
 
     # Also detect object columns whose values look like date strings
     # (e.g. "YYYY-MM-DD" strings produced by standardize_dates).
-    # select_dtypes(include="datetime") misses these since they are dtype object.
     for _col in df.select_dtypes(include="object").columns:
         if _col in date_cols:
             continue
@@ -52,16 +54,16 @@ def render_visualization(df):
     viz_type = st.radio(
         "Select Chart Type",
         [
-            "Correlation (Scatter)",
-            "Comparison (Bar)",
-            "Distribution (Histogram)",
-            "Trends (Line)",
+            "Correlation",
+            "Comparison",
+            "Distribution",
+            "Trends",
         ],
         horizontal=True,
     )
 
-    # ── Correlation (Scatter) ────────────────────────────────────────────────
-    if viz_type == "Correlation (Scatter)":
+    # Correlation (Scatter Plot) 
+    if viz_type == "Correlation":
         if len(numeric_cols) >= 2:
             x = st.selectbox("X-axis (Numeric)", numeric_cols, key="scatter_x")
             y = st.selectbox(
@@ -93,8 +95,8 @@ def render_visualization(df):
         else:
             st.warning("Needs at least 2 numeric columns for a scatter plot.")
 
-    # ── Comparison (Bar) ────────────────────────────────────────────────────
-    elif viz_type == "Comparison (Bar)":
+    # Comparison (Bar Grap)
+    elif viz_type == "Comparison":
         if categorical_cols and numeric_cols:
             cat = st.selectbox("Category (X-axis)", categorical_cols, key="bar_cat")
             val = st.selectbox("Value (Y-axis)",    numeric_cols,     key="bar_val")
@@ -124,8 +126,8 @@ def render_visualization(df):
         else:
             st.warning("Needs at least one categorical and one numeric column.")
 
-    # ── Distribution (Histogram) ─────────────────────────────────────────────
-    elif viz_type == "Distribution (Histogram)":
+    # Distribution (Histogram)
+    elif viz_type == "Distribution":
         all_cols = numeric_cols + categorical_cols
         if all_cols:
             col_sel = st.selectbox("Select Column", all_cols, key="hist_col")
@@ -145,8 +147,8 @@ def render_visualization(df):
         else:
             st.warning("No columns available for histogram.")
 
-    # ── Trends (Line) ────────────────────────────────────────────────────────
-    elif viz_type == "Trends (Line)":
+    # Trends (Line Graph)
+    elif viz_type == "Trends":
         if date_cols and numeric_cols:
             d_col = st.selectbox("Date Column",      date_cols,    key="line_date")
             n_col = st.selectbox("Value to Track",   numeric_cols, key="line_val")

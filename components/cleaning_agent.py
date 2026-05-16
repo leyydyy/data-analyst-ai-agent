@@ -284,8 +284,8 @@ def render_cleaning_agent(df):
         and not st.session_state.get("pending_plan")
         and not st.session_state.auto_plan_generated
     ):
-        st.info("⚠️ Dataset is messy. Generating cleaning plan")
-        _generate_plan(df)
+        with st.spinner("AI is generating a cleaning plan"):
+            _generate_plan(df)
         st.session_state.auto_plan_generated = True
         st.rerun()
 
@@ -296,7 +296,8 @@ def render_cleaning_agent(df):
             and st.session_state.get("auto_plan_generated")
         ):
             if st.button("Generate Cleaning Plan"):
-                _generate_plan(df)
+                with st.spinner("AI is generating a cleaning plan…"):
+                    _generate_plan(df)
 
     else:
         st.success("Dataset appears clean.")

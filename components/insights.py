@@ -15,23 +15,19 @@ def render_insights(df):
 
     # AUTO INSIGHTS
     if st.session_state.get("auto_insights", False):
-
         if quality == "unclean":
             st.warning(
                 "⚠️ These insights are based on raw, unclean data and may be "
                 "inaccurate. Consider approving the cleaning plan above for "
                 "more reliable results."
             )
-        else:
-            st.success("Generating insights from data")
-
-        _generate_insights(df)
-
         st.session_state.auto_insights = False
+        with st.spinner("AI is analyzing your dataset"):
+            _generate_insights(df)
 
-    # MANUAL BUTTON
     if st.button("Regenerate Insights"):
-        _generate_insights(df)
+        with st.spinner("AI is analyzing your dataset"):
+            _generate_insights(df)
 
 
 def _generate_insights(df):
