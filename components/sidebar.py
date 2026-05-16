@@ -65,8 +65,3 @@ def render_sidebar():
             mime="text/csv",
             use_container_width=True,
         )
-
-        if st.session_state.get("change_log"):
-            with st.sidebar.expander("View Change Log"):
-                for entry in st.session_state.change_log:
-                    st.write(f"- {entry}")

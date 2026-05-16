@@ -1,11 +1,19 @@
 import streamlit as st
+import pandas as pd
 import plotly.express as px
 
 
 def render_visualization(df):
     """Draw the chart explorer section for the given DataFrame."""
 
-    # Disclaimer if the dataset hasn't been cleaned yet
+    # Disclaimer
+    st.info(
+        "📌 Charts are generated directly from your dataset using Python/Plotly. "
+        "The AI is not involved here — what you see is exactly what the data contains. "
+        "If a chart looks wrong, the source data may still need manual review."
+    )
+
+    # Warn if the dataset hasn't been cleaned yet
     if (
         st.session_state.get("data_quality") == "unclean"
         and not st.session_state.get("cleaned", False)
@@ -23,6 +31,20 @@ def render_visualization(df):
         include=["datetime", "datetimetz"]
     ).columns.tolist()
 
+    # Also detect object columns whose values look like date strings
+    # (e.g. "YYYY-MM-DD" strings produced by standardize_dates).
+    # select_dtypes(include="datetime") misses these since they are dtype object.
+    for _col in df.select_dtypes(include="object").columns:
+        if _col in date_cols:
+            continue
+        _sample = df[_col].dropna().head(10)
+        try:
+            _parsed = pd.to_datetime(_sample, errors="coerce")
+            if _parsed.notna().sum() >= len(_sample) * 0.8:
+                date_cols.append(_col)
+        except Exception:
+            pass
+
     if not numeric_cols and not categorical_cols:
         st.warning("No plottable columns found in this dataset.")
         return
@@ -38,8 +60,8 @@ def render_visualization(df):
         horizontal=True,
     )
 
-    # Correlation (Scatter Plot) 
-    if viz_type == "Correlation":
+    # ── Correlation (Scatter) ────────────────────────────────────────────────
+    if viz_type == "Correlation (Scatter)":
         if len(numeric_cols) >= 2:
             x = st.selectbox("X-axis (Numeric)", numeric_cols, key="scatter_x")
             y = st.selectbox(
@@ -71,8 +93,8 @@ def render_visualization(df):
         else:
             st.warning("Needs at least 2 numeric columns for a scatter plot.")
 
-    # Comparison (Bar Graph)
-    elif viz_type == "Comparison":
+    # ── Comparison (Bar) ────────────────────────────────────────────────────
+    elif viz_type == "Comparison (Bar)":
         if categorical_cols and numeric_cols:
             cat = st.selectbox("Category (X-axis)", categorical_cols, key="bar_cat")
             val = st.selectbox("Value (Y-axis)",    numeric_cols,     key="bar_val")
@@ -102,8 +124,8 @@ def render_visualization(df):
         else:
             st.warning("Needs at least one categorical and one numeric column.")
 
-    # Distribution (Histogram)
-    elif viz_type == "Distribution":
+    # ── Distribution (Histogram) ─────────────────────────────────────────────
+    elif viz_type == "Distribution (Histogram)":
         all_cols = numeric_cols + categorical_cols
         if all_cols:
             col_sel = st.selectbox("Select Column", all_cols, key="hist_col")
@@ -123,8 +145,8 @@ def render_visualization(df):
         else:
             st.warning("No columns available for histogram.")
 
-    # Trends (Line CHart)
-    elif viz_type == "Trends":
+    # ── Trends (Line) ────────────────────────────────────────────────────────
+    elif viz_type == "Trends (Line)":
         if date_cols and numeric_cols:
             d_col = st.selectbox("Date Column",      date_cols,    key="line_date")
             n_col = st.selectbox("Value to Track",   numeric_cols, key="line_val")
@@ -134,8 +156,11 @@ def render_visualization(df):
                 key="line_color",
             )
             try:
+                # Parse string dates to datetime for correct chronological sort
+                plot_df = df.copy()
+                plot_df[d_col] = pd.to_datetime(plot_df[d_col], errors="coerce")
                 fig = px.line(
-                    df.sort_values(d_col),
+                    plot_df.sort_values(d_col),
                     x=d_col,
                     y=n_col,
                     color=None if color == "None" else color,

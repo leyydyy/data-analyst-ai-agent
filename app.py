@@ -145,34 +145,41 @@ else:
     # Data Preview
     st.dataframe(df.head(10), use_container_width=True)
 
-    st.divider()
-
     # Tab LOgic
     if "active_tab" not in st.session_state:
         st.session_state.active_tab = 0
 
     visuals_ready = insights_are_ready()
 
-    tab1, tab2, tab3 = st.tabs([
-        "🧹 Data Cleaning",
-        "📈 Visuals & Insights",
-        "💬 Ask About Your Dataset"
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "Data Cleaning",
+        "Visuals",
+        "Insights",
+        "Ask About Your Dataset"
     ])
+
 
     # Tab 1: Cleaning
     with tab1:
         render_cleaning_agent(df)
 
-    # Tab 2: Visuals & Insights 
+        # Change log after cleaning
+        if st.session_state.get("change_log"):
+            st.divider()
+            st.subheader("📋 Change Log")
+            for entry in st.session_state.change_log:
+                st.write(f"- {entry}")
+
+    # Tab 2: Visuals 
     with tab2:
         st.subheader("📈 Visualization")
         render_visualization(df)
 
-        st.divider()
-
+    # Tab 3: Inisghts
+    with tab3:
         st.subheader("💡 AI Insights")
         render_insights(df)
 
-    # Tab 3: Ask About Your Dataset
-    with tab3:
+    # Tab 4: Ask About Your Dataset
+    with tab4:
         render_qa(df)
