@@ -131,7 +131,7 @@ else:
     with badge_col:
         st.markdown(
             f"<div style='text-align:right; color:#94a3b8; font-size:0.8rem; padding-top:0.6rem;'>"
-            f"📄 {st.session_state.get('current_file', 'dataset')}</div>",
+            f"{st.session_state.get('current_file', 'dataset')}</div>",
             unsafe_allow_html=True
         )
 
@@ -166,18 +166,18 @@ else:
         # Change log after cleaning
         if st.session_state.get("change_log"):
             st.divider()
-            st.subheader("📋 Change Log")
+            st.subheader("Change Log")
             for entry in st.session_state.change_log:
                 st.write(f"- {entry}")
 
     # Tab 2: Visuals 
     with tab2:
-        st.subheader("📈 Visualization")
+        st.subheader("Visualization")
         render_visualization(df)
 
     # Tab 3: Inisghts
     with tab3:
-        st.subheader("💡 AI Insights")
+        st.subheader("AI Insights")
         render_insights(df)
 
     # Tab 4: Ask About Your Dataset
