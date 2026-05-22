@@ -1,0 +1,15 @@
+# Env/secret
+.env
+
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary or Cache files
+*.pkl
+
+# Virtual Environments
+venv/
+env/
+.venv/

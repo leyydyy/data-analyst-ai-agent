@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 import streamlit as st
 
 load_dotenv()
-# OpenAI Client
 client = OpenAI()
 
 # Session Defaults
