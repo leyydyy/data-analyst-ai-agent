@@ -432,9 +432,9 @@ def render_visualization(df: pd.DataFrame) -> None:
             st.session_state.pop(cache_key, None)
             st.session_state.pop(cache_key_sig, None)
 
-        # Auto-generate on first load or after cache bust
+        # Autogenerate on first load 
         if cache_key not in st.session_state:
-            with st.spinner("AI is analysing your dataset and choosing the best charts…"):
+            with st.spinner("AI is analyzing your dataset and choosing the best charts…"):
                 try:
                     specs = _ask_ai_for_charts(df)
                     st.session_state[cache_key]     = specs
