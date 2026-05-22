@@ -4,23 +4,9 @@ from config import client
 from utils.data_summary import build_dataset_summary
 from utils.cleaning import apply_cleaning_plan, _ALLOWED_ACTIONS
 
-# Icons
-_ACTION_ICONS = {
-    "drop_column":            "🗑️",
-    "fill_median":            "📊",
-    "fill_mean":              "📊",
-    "fill_mode":              "📊",
-    "fill_constant":          "📝",
-    "remove_duplicates":      "🔁",
-    "fix_dtypes":             "🔧",
-    "standardize_categories": "✏️",
-    "standardize_dates":      "📅",
-}
-
-# Prompts — Plan generation
 _SYSTEM_PROMPT = (
     "You are a precise data cleaning agent. Output only valid JSON — "
-    "no markdown, no explanation, no code fences."
+    "No markdown, no explanation, no code fences."
 )
 
 _USER_PROMPT_TEMPLATE = """
@@ -44,7 +30,7 @@ If NONE of the built-in actions fit, you may use a short descriptive action name
 (e.g. "remove_special_chars", "cap_outliers"). These will trigger code generation.
 Prefer built-in actions when possible.
 
-Return ONLY JSON:
+Return ONLY JSON in this exact shape:
 {{
   "summary": "Brief dataset quality overview",
   "confidence": 0-100,
@@ -58,12 +44,61 @@ Return ONLY JSON:
     }}
   ]
 }}
+
+## Example 1 — Mixed issues (nulls, duplicates, wrong dtype, messy categories)
+
+Input dataset summary:
+{{
+  "shape": [500, 5],
+  "columns": {{
+    "Emp_ID":     {{"dtype": "int64",   "nulls": 0}},
+    "Name":       {{"dtype": "object",  "nulls": 3}},
+    "Department": {{"dtype": "object",  "nulls": 0,  "sample_values": ["HR", "hr", "Finance", "FINANCE"]}},
+    "Salary":     {{"dtype": "object",  "nulls": 0,  "sample_values": ["50000", "60000", "N/A"]}},
+    "JoinDate":   {{"dtype": "object",  "nulls": 0,  "sample_values": ["2020-01-15", "15/01/2020", "Jan 15 2020"]}}
+  }},
+  "duplicate_rows": 12
+}}
+
+Output:
+{{
+  "summary": "Dataset has 3 missing names, 12 duplicate rows, inconsistent department casing, Salary stored as text with invalid entries, and mixed date formats.",
+  "confidence": 88,
+  "steps": [
+    {{"action": "fill_mode",              "column": "Name",       "reason": "Fill 3 missing names with the most frequent value as a safe placeholder."}},
+    {{"action": "remove_duplicates",      "column": "all",        "reason": "Remove 12 duplicate rows to avoid skewed aggregations."}},
+    {{"action": "standardize_categories", "column": "Department", "reason": "Normalize HR/hr/Finance/FINANCE to consistent casing."}},
+    {{"action": "fix_dtypes",             "column": "Salary",     "reason": "Cast Salary from object to numeric; invalid entries like N/A will become NaN.", "dtype": "float"}},
+    {{"action": "standardize_dates",      "column": "JoinDate",   "reason": "Unify mixed date formats to YYYY-MM-DD."}}
+  ]
+}}
+
+## Example 2 — Mostly clean dataset
+
+Input dataset summary:
+{{
+  "shape": [200, 3],
+  "columns": {{
+    "ProductID": {{"dtype": "int64",  "nulls": 0}},
+    "Price":     {{"dtype": "float64","nulls": 0}},
+    "Category":  {{"dtype": "object", "nulls": 0}}
+  }},
+  "duplicate_rows": 0
+}}
+
+Output:
+{{
+  "summary": "Dataset appears clean with no nulls, no duplicates, and correct dtypes.",
+  "confidence": 97,
+  "steps": []
+}}
+
+Notice: When the data is already clean, return an empty steps array — do not invent problems.
 """
 
-# Prompts — Code-gen fallback
 _CODEGEN_SYSTEM = (
     "You are a pandas code generation expert. "
-    "Output only valid Python code — no markdown, no explanation, no code fences. "
+    "Output only valid Python code. No markdown, no explanation, no code fences. "
     "The code will be executed with exec(). "
     "You have access to `df` (a pandas DataFrame) and `pd` (pandas). "
     "You MUST assign the result back to `df`. "
@@ -87,17 +122,45 @@ Rules:
 - Assign result back to `df` (e.g. df['col'] = ... or df = df.drop(...))
 - No imports, no print statements, no comments
 - Keep it minimal — one logical operation only
+
+## Example 1 — Remove special characters from a text column
+
+Step details:
+  action : remove_special_chars
+  column : Phone
+  reason : Phone numbers contain dashes and parentheses that should be stripped.
+
+Output:
+df['Phone'] = df['Phone'].astype(str).str.replace(r'[^\\d]', '', regex=True)
+
+## Example 2 — Cap outliers at the 99th percentile
+
+Step details:
+  action : cap_outliers
+  column : Salary
+  reason : A small number of extreme salary values are skewing the distribution.
+
+Output:
+df['Salary'] = df['Salary'].clip(upper=df['Salary'].quantile(0.99))
+
+## Example 3 — Strip leading and trailing whitespace from a column
+
+Step details:
+  action : strip_whitespace
+  column : City
+  reason : City names have inconsistent leading/trailing spaces.
+
+Output:
+df['City'] = df['City'].str.strip()
+
+Notice: Always assign back to df. One operation only. No imports or comments.
 """
 
-
-# Code-gen fallback function
 def _request_codegen(step: dict, df) -> str | None:
     """
     Ask the AI to write a pandas snippet for a step whose action is not
     in the built-in list. Returns the code string, or None on failure.
     """
-    import pandas as pd
-
     prompt = _CODEGEN_USER_TEMPLATE.format(
         action  = step.get("action", ""),
         column  = step.get("column", ""),
@@ -110,24 +173,21 @@ def _request_codegen(step: dict, df) -> str | None:
     try:
         response = client.chat.completions.create(
             model       = "gpt-4o-mini",
-            temperature = 0.1,       # low temp → deterministic, safe code
-            max_tokens  = 300,       # snippets are short; cap cost
+            temperature = 0.1,
+            max_tokens  = 300,
             messages    = [
                 {"role": "system", "content": _CODEGEN_SYSTEM},
                 {"role": "user",   "content": prompt},
             ],
         )
         code = response.choices[0].message.content.strip()
-        # Strip accidental markdown fences
         code = code.replace("```python", "").replace("```", "").strip()
         return code if code else None
 
-    except Exception as e:
-        # Non-fatal — caller will log the skip
+    except Exception:
         return None
 
 
-# Messiness Detection
 def is_dataset_messy(df):
     total_cells     = df.shape[0] * df.shape[1]
     missing_ratio   = df.isnull().sum().sum() / total_cells if total_cells > 0 else 0
@@ -145,7 +205,6 @@ def is_dataset_messy(df):
     )
 
 
-# Generate Plan
 def _generate_plan(df):
     summary = build_dataset_summary(df)
 
@@ -174,7 +233,7 @@ def _generate_plan(df):
             st.error("Invalid plan format returned by AI.")
             return
 
-        # Split steps into built-in vs custom so the UI can label them
+        # Tag custom steps so the UI can label them
         for step in plan["steps"]:
             action = step.get("action", "").strip().lower()
             step["_is_custom"] = action not in _ALLOWED_ACTIONS
@@ -185,7 +244,6 @@ def _generate_plan(df):
         st.error(f"AI Error: {e}")
 
 
-# Render Plan Review
 def _render_plan_review(df):
     plan  = st.session_state.pending_plan
     steps = plan.get("steps", [])
@@ -195,7 +253,6 @@ def _render_plan_review(df):
     if "confidence" in plan:
         st.metric("AI Confidence", f"{plan['confidence']}%")
 
-    # Count how many steps need code-gen so user knows what to expect
     custom_count = sum(1 for s in steps if s.get("_is_custom"))
     if custom_count:
         st.info(
@@ -207,17 +264,16 @@ def _render_plan_review(df):
 
     for i, step in enumerate(steps, start=1):
         action     = step.get("action", "")
-        icon       = _ACTION_ICONS.get(action, "🤖" if step.get("_is_custom") else "•")
         col        = step.get("column", "")
         target     = f" on **{col}**" if col and col != "all" else ""
         custom_tag = " *(custom — code gen)*" if step.get("_is_custom") else ""
-        st.markdown(f"{i}. {icon} `{action}`{target}{custom_tag} — {step.get('reason')}")
+        st.markdown(f"{i}. `{action}`{target}{custom_tag} — {step.get('reason')}")
 
     col1, col2 = st.columns(2)
 
     # APPROVE
     with col1:
-        if st.button("✅ Approve & Execute Plan", type="primary"):
+        if st.button("Approve & Execute Plan", type="primary"):
             with st.spinner("Applying cleaning…"):
 
                 current_df = st.session_state.get("df", df)
@@ -232,19 +288,18 @@ def _render_plan_review(df):
                     st.session_state.pending_plan = None
                     st.rerun()
 
-                # Pass codegen_fn so cleaning.py can call back for custom steps
                 cleaned_df, change_log = apply_cleaning_plan(
                     current_df,
                     steps,
                     codegen_fn=_request_codegen,
                 )
 
-            st.session_state.df            = cleaned_df
-            st.session_state.change_log    = change_log
-            st.session_state.cleaned       = True
-            st.session_state.pending_plan  = None
-            st.session_state.data_quality  = "clean"
-            st.session_state.auto_insights = True
+            st.session_state.df                 = cleaned_df
+            st.session_state.change_log         = change_log
+            st.session_state.cleaned            = True
+            st.session_state.pending_plan       = None
+            st.session_state.data_quality       = "clean"
+            st.session_state.auto_insights      = True
             st.session_state.insights_generated = True
 
             st.success("Cleaning applied successfully!")
@@ -262,23 +317,23 @@ def _render_plan_review(df):
             st.session_state.pending_plan = None
             st.rerun()
 
-# MAIN RENDER
+
 def render_cleaning_agent(df):
 
     if "auto_plan_generated" not in st.session_state:
         st.session_state.auto_plan_generated = False
 
-    # AUTO DETECT DATA QUALITY
+    # Auto-detect data quality
     if st.session_state.data_quality == "unknown":
         if is_dataset_messy(df):
             st.session_state.data_quality  = "unclean"
             st.session_state.auto_insights = True
         else:
-            st.session_state.data_quality  = "clean"
-            st.session_state.auto_insights = True
+            st.session_state.data_quality       = "clean"
+            st.session_state.auto_insights      = True
             st.session_state.insights_generated = True
 
-    # AUTO PLAN GENERATION
+    # Auto-generate plan on first load for unclean data
     if (
         st.session_state.data_quality == "unclean"
         and not st.session_state.get("pending_plan")
@@ -289,7 +344,7 @@ def render_cleaning_agent(df):
         st.session_state.auto_plan_generated = True
         st.rerun()
 
-    # MANUAL GENERATE
+    # Manual re-generate button (shown after auto-plan was rejected)
     if st.session_state.data_quality == "unclean":
         if (
             not st.session_state.get("pending_plan")
@@ -298,10 +353,9 @@ def render_cleaning_agent(df):
             if st.button("Generate Cleaning Plan"):
                 with st.spinner("AI is generating a cleaning plan…"):
                     _generate_plan(df)
-
     else:
         st.success("Dataset appears clean.")
 
-    # SHOW PLAN
+    # Show plan review if one is pending
     if st.session_state.get("pending_plan"):
         _render_plan_review(df)

@@ -35,28 +35,43 @@ def _ask_ai_for_charts(df: pd.DataFrame) -> list[dict]:
     summary = _dataset_summary(df)
 
     system_prompt = """You are a data visualization expert.
-Given a dataset summary, recommend 4-6 insightful charts that surface real patterns,
-distributions, comparisons, or trends in the data.
+    Given a dataset summary, recommend 4-6 insightful charts.
+    Reply ONLY with a valid JSON array. No markdown, no prose, no code fences.
 
-Reply ONLY with a valid JSON array — no markdown, no prose, no code fences.
+    Each element must be one of these exact shapes:
+    {"type":"scatter",   "x":"<num_col>",    "y":"<num_col>",    "color":"<cat_col or None>", "title":"..."}
+    {"type":"bar",       "cat":"<cat_col>",  "val":"<num_col>",  "agg":"<mean|sum|count|median|max|min>", "title":"..."}
+    {"type":"histogram", "col":"<col>",      "bins":20,                                        "title":"..."}
+    {"type":"line",      "date":"<date_col>","val":"<num_col>",  "color":"<cat_col or None>",  "title":"..."}
+    {"type":"box",       "cat":"<cat_col>",  "val":"<num_col>",                                "title":"..."}
+    {"type":"pie",       "names":"<cat_col>","values":"<num_col>",                             "title":"..."}
+    {"type":"pie_count", "names":"<cat_col>",                                                  "title":"..."}
 
-Each element must be one of these exact shapes:
-  {"type":"scatter",   "x":"<num_col>",    "y":"<num_col>",    "color":"<cat_col or None>", "title":"..."}
-  {"type":"bar",       "cat":"<cat_col>",  "val":"<num_col>",  "agg":"<mean|sum|count|median|max|min>", "title":"..."}
-  {"type":"histogram", "col":"<col>",      "bins":20,                                        "title":"..."}
-  {"type":"line",      "date":"<date_col>","val":"<num_col>",  "color":"<cat_col or None>",  "title":"..."}
-  {"type":"box",       "cat":"<cat_col>",  "val":"<num_col>",                                "title":"..."}
-  {"type":"pie",       "names":"<cat_col>","values":"<num_col>",                             "title":"..."}
+    Rules:
+    - Only reference columns that actually exist in the dataset.
+    - For "pie", only use categorical columns with 10 or fewer unique values.
+    - Vary the chart types — do not repeat the same type more than twice.
+    - Prioritise charts that are genuinely informative given the data shape.
+    - For "pie" and "bar", NEVER use ID columns, index columns, or any numeric column
+    whose name contains 'id', 'ID', 'Id', 'key', 'code', or 'num' as the value.
+    Use aggregated counts instead by setting "agg":"count" for bar,
+    or use "pie_count" for pie.
 
-Rules:
-- Only reference columns that actually exist in the dataset.
-- For "pie", only use categorical columns with 10 or fewer unique values.
-- Vary the chart types — do not repeat the same type more than twice.
-- Prioritise charts that are genuinely informative given the data shape.
-- For "pie" and "bar", NEVER use ID columns, index columns, or any numeric column 
-  whose name contains 'id', 'ID', 'Id', 'key', 'code', or 'num' as the value.
-  Use aggregated counts instead by setting "agg":"count" for bar, 
-  or use {"type":"pie_count", "names":"<cat_col>", "title":"..."} for pie."""
+    ## Example
+
+    Input:
+    Shape: 200 rows × 4 columns
+    Columns: 'Department' (object), 'Salary' (float64), 'Age' (int64), 'Emp_ID' (int64)
+
+    Output:
+    [
+    {"type":"bar",       "cat":"Department", "val":"Salary", "agg":"mean", "title":"Average Salary by Department"},
+    {"type":"histogram", "col":"Age",        "bins":20,                    "title":"Age Distribution"},
+    {"type":"box",       "cat":"Department", "val":"Age",                  "title":"Age Spread by Department"}
+    ]
+
+    Notice: Emp_ID was ignored because it is an identifier, not a meaningful measure.
+    """
 
     response = client.chat.completions.create(
         model="gpt-4o",
