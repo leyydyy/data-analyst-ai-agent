@@ -466,10 +466,7 @@ def render_visualization(df: pd.DataFrame) -> None:
             chart_title = spec.get("title", f"Chart {i + 1}")
             chart_type  = spec.get("type", "unknown").capitalize()
 
-            with st.expander(f"📊 {chart_title}  ·  `{chart_type}`", expanded=True):
-                with st.popover("🔍 View chart spec (AI output)"):
-                    st.caption("This is the exact JSON the AI returned for this chart.")
-                    st.json(spec)
+            with st.expander(f"{chart_title}  ·  `{chart_type}`", expanded=True):
                 _render_chart(df, spec)
 
     else:
