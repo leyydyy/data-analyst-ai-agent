@@ -25,6 +25,7 @@ SESSION_DEFAULTS = {
     "auto_insights": False,
     "data_quality": "unknown",
     "insights_generated": False,
+    "qa_history": [],
 }
 
 # Initialize Session State
