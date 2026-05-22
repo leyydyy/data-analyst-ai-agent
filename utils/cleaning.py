@@ -79,7 +79,7 @@ def fix_data_types(
                 fixed.append(f"{col} → str")
         except Exception as e:
             if log is not None:
-                log.append(f"⚠️ Could not cast {col} to {dtype}: {e}")
+                log.append(f"Could not cast {col} to {dtype}: {e}")
         if log is not None and fixed:
             log.append(f"🔧 Fixed data types: {'; '.join(fixed)}")
         return df
@@ -125,7 +125,7 @@ def standardize_dates(
     coerced      = int(after_nulls - before_nulls)
     df[col]      = df[col].dt.strftime("%Y-%m-%d")
 
-    msg = f"📅 Standardized dates in **{col}** to YYYY-MM-DD"
+    msg = f"Standardized dates in **{col}** to YYYY-MM-DD"
     if coerced:
         msg += f" ({coerced} unparseable value(s) set to NaN)"
     if log is not None:
@@ -186,7 +186,7 @@ def _run_codegen_step(
             raise ValueError("AI code did not produce a DataFrame named `df`.")
 
         log.append(
-            f"🤖 Custom code applied for `{action}`"
+            f"Custom code applied for `{action}`"
             + (f" on **{col}**" if col and col != "all" else "")
             + f" — {reason}"
         )
@@ -194,7 +194,7 @@ def _run_codegen_step(
 
     except Exception as e:
         log.append(
-            f"⚠️ Code-gen fallback failed for `{action}`"
+            f"Code-gen fallback failed for `{action}`"
             + (f" on '{col}'" if col else "")
             + f": {e}"
         )
@@ -252,7 +252,7 @@ def _execute_step(temp: pd.DataFrame, step: dict, log: list) -> pd.DataFrame:
     if action == "drop_column":
         if col in temp.columns:
             temp = temp.drop(columns=[col])
-            log.append(f"🗑️ Dropped column **{col}** — {reason}")
+            log.append(f"Dropped column **{col}** — {reason}")
 
     elif action == "fill_median":
         if col in temp.columns:
@@ -262,7 +262,7 @@ def _execute_step(temp: pd.DataFrame, step: dict, log: list) -> pd.DataFrame:
                 missing_count = temp[col].isnull().sum()
                 temp[col]     = temp[col].fillna(median_val)
                 log.append(
-                    f"📊 Filled {missing_count} missing in **{col}** "
+                    f"Filled {missing_count} missing in **{col}** "
                     f"with median ({median_val:.2f}) — {reason}"
                 )
 
@@ -274,7 +274,7 @@ def _execute_step(temp: pd.DataFrame, step: dict, log: list) -> pd.DataFrame:
                 missing_count = temp[col].isnull().sum()
                 temp[col]     = temp[col].fillna(mean_val)
                 log.append(
-                    f"📊 Filled {missing_count} missing in **{col}** "
+                    f"Filled {missing_count} missing in **{col}** "
                     f"with mean ({mean_val:.2f}) — {reason}"
                 )
 
@@ -285,7 +285,7 @@ def _execute_step(temp: pd.DataFrame, step: dict, log: list) -> pd.DataFrame:
                 missing_count = temp[col].isnull().sum()
                 temp[col]     = temp[col].fillna(mode_vals[0])
                 log.append(
-                    f"📊 Filled {missing_count} missing in **{col}** "
+                    f"Filled {missing_count} missing in **{col}** "
                     f"with mode ('{mode_vals[0]}') — {reason}"
                 )
 
@@ -295,7 +295,7 @@ def _execute_step(temp: pd.DataFrame, step: dict, log: list) -> pd.DataFrame:
             missing_count = temp[col].isnull().sum()
             temp[col]     = temp[col].fillna(value)
             log.append(
-                f"📝 Filled {missing_count} missing in **{col}** "
+                f"Filled {missing_count} missing in **{col}** "
                 f"with '{value}' — {reason}"
             )
 
@@ -303,7 +303,7 @@ def _execute_step(temp: pd.DataFrame, step: dict, log: list) -> pd.DataFrame:
         before  = len(temp)
         temp    = temp.drop_duplicates()
         removed = before - len(temp)
-        log.append(f"🔁 Removed {removed} duplicate rows — {reason}")
+        log.append(f"Removed {removed} duplicate rows — {reason}")
 
     elif action == "fix_dtypes":
         temp = fix_data_types(
@@ -359,7 +359,7 @@ def apply_cleaning_plan(
 
     # Log the reordered sequence so the UI can show it
     log.append(
-        "📋 Execution order: "
+        "Execution order: "
         + " → ".join(s.get("action", "?") for s in ordered_steps)
     )
 
@@ -375,13 +375,13 @@ def apply_cleaning_plan(
                     if code:
                         temp = _run_codegen_step(temp, code, step, log)
                     else:
-                        log.append(f"⚠️ Code-gen returned nothing for `{action}` on '{col}' — skipped")
+                        log.append(f"Code-gen returned nothing for `{action}` on '{col}' — skipped")
                 else:
-                    log.append(f"⚠️ Skipped unrecognised action `{action}` on '{col}' (no codegen available)")
+                    log.append(f"Skipped unrecognised action `{action}` on '{col}' (no codegen available)")
             else:
                 temp = _execute_step(temp, step, log)
 
         except Exception as e:
-            log.append(f"⚠️ Skipped step `{action}` on '{col}': {e}")
+            log.append(f"Skipped step `{action}` on '{col}': {e}")
 
     return temp, log

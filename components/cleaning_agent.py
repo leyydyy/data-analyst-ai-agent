@@ -5,7 +5,7 @@ from utils.data_summary import build_dataset_summary
 from utils.cleaning import apply_cleaning_plan, _ALLOWED_ACTIONS
 
 _SYSTEM_PROMPT = (
-    "You are a precise data cleaning agent. Output only valid JSON — "
+    "You are a precise data cleaning agent. Output only valid JSON."
     "No markdown, no explanation, no code fences."
 )
 
@@ -233,7 +233,7 @@ def _generate_plan(df):
             st.error("Invalid plan format returned by AI.")
             return
 
-        # Tag custom steps so the UI can label them
+        # Tag custom steps so the UI can label
         for step in plan["steps"]:
             action = step.get("action", "").strip().lower()
             step["_is_custom"] = action not in _ALLOWED_ACTIONS
@@ -305,16 +305,19 @@ def _render_plan_review(df):
             st.success("Cleaning applied successfully!")
 
             if change_log:
-                st.write("### 🧾 Changes Applied")
+                st.write("### Changes Applied")
                 for c in change_log:
                     st.write(f"- {c}")
 
             st.rerun()
 
-    # REJECT
+    # REGENERATE
     with col2:
-        if st.button("❌ Reject Plan"):
+        if st.button("Regenerate Plan"):
             st.session_state.pending_plan = None
+            st.session_state.auto_plan_generated = False
+            with st.spinner("AI is generating a new cleaning plan…"):
+                _generate_plan(df)
             st.rerun()
 
 
@@ -323,7 +326,7 @@ def render_cleaning_agent(df):
     if "auto_plan_generated" not in st.session_state:
         st.session_state.auto_plan_generated = False
 
-    # Auto-detect data quality
+    # Autodetect data quality
     if st.session_state.data_quality == "unknown":
         if is_dataset_messy(df):
             st.session_state.data_quality  = "unclean"
@@ -333,7 +336,7 @@ def render_cleaning_agent(df):
             st.session_state.auto_insights      = True
             st.session_state.insights_generated = True
 
-    # Auto-generate plan on first load for unclean data
+    # Auto generate plan on first load for unclean data
     if (
         st.session_state.data_quality == "unclean"
         and not st.session_state.get("pending_plan")

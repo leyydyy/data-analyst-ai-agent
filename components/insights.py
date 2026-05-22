@@ -9,7 +9,7 @@ def render_insights(df):
 
     # WARNINGS
     st.info(
-        "ℹ️ AI-generated insights may contain errors. "
+        "AI-generated insights may contain errors. "
         "Always validate results before making decisions."
     )
 
@@ -17,7 +17,7 @@ def render_insights(df):
     if st.session_state.get("auto_insights", False):
         if quality == "unclean":
             st.warning(
-                "⚠️ These insights are based on raw, unclean data and may be "
+                "These insights are based on raw, unclean data and may be "
                 "inaccurate. Consider approving the cleaning plan above for "
                 "more reliable results."
             )
