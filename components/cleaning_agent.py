@@ -272,11 +272,9 @@ def _render_plan_review(df):
         st.markdown(f"{i}. `{action}`{target}{custom_tag} — {step.get('reason')}")
 
     st.warning(
-        "⚠️ **Review carefully before applying.** This plan is AI-generated and may not be "
-        "fully accurate — it could miss issues, make incorrect assumptions, or modify data "
-        "in unintended ways. Verify each step against your dataset before approving. "
-        "Your original data will be backed up, but changes should still be treated as "
-        "a starting point, not a guaranteed fix."
+        "**Review carefully before applying.** This plan is AI-generated and may not be "
+        "fully accurate. It could miss issues, make incorrect assumptions, or modify data "
+        "in unintended ways. Verify each step against your dataset before approving."
     )
 
     col1, col2 = st.columns(2)
