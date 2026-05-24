@@ -189,19 +189,21 @@ def _request_codegen(step: dict, df) -> str | None:
 
 
 def is_dataset_messy(df):
-    total_cells     = df.shape[0] * df.shape[1]
-    missing_ratio   = df.isnull().sum().sum() / total_cells if total_cells > 0 else 0
-    duplicate_ratio = df.duplicated().sum() / len(df) if len(df) > 0 else 0
+    total_rows = len(df)
+    total_cells = df.shape[0] * df.shape[1]
+    
+    if total_rows == 0:
+        return False
+        
+    missing_ratio   = df.isnull().sum().sum() / total_cells
+    duplicate_ratio = df.duplicated().sum() / total_rows
     object_ratio    = len(df.select_dtypes(include="object").columns) / len(df.columns)
-    missing_count   = df.isnull().sum().sum()
-    duplicate_count = df.duplicated().sum()
-
+    missing_threshold = 0.01 if total_rows < 1000 else 0.05
+    
     return (
-        missing_ratio   > 0.01 or
-        missing_count   > 5    or
-        duplicate_ratio > 0.01 or
-        duplicate_count > 0    or
-        object_ratio    > 0.6
+        missing_ratio > missing_threshold or
+        duplicate_ratio > 0.02 or
+        object_ratio > 0.75
     )
 
 
@@ -268,6 +270,14 @@ def _render_plan_review(df):
         target     = f" on **{col}**" if col and col != "all" else ""
         custom_tag = " *(custom — code gen)*" if step.get("_is_custom") else ""
         st.markdown(f"{i}. `{action}`{target}{custom_tag} — {step.get('reason')}")
+
+    st.warning(
+        "⚠️ **Review carefully before applying.** This plan is AI-generated and may not be "
+        "fully accurate — it could miss issues, make incorrect assumptions, or modify data "
+        "in unintended ways. Verify each step against your dataset before approving. "
+        "Your original data will be backed up, but changes should still be treated as "
+        "a starting point, not a guaranteed fix."
+    )
 
     col1, col2 = st.columns(2)
 
