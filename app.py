@@ -116,7 +116,9 @@ if st.session_state.get("df") is None:
             save_to_cache(df_loaded, uploaded_file.name, st.session_state.insights_generated)
 
             st.rerun()
-        st.info("Supported formats: CSV, XLSX", icon=None)
+        st.info("**Privacy Notice:** Please anonymize sensitive data before uploading. "
+            "While your full dataset is kept locally, statistics and a sample of the **first 5 rows** "
+            "are sent to the AI to generate cleaning plans, charts, and insights.")
 
 # MAIN DASHBOARD
 else:
