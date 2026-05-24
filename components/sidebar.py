@@ -40,6 +40,7 @@ def render_sidebar():
             "active_tab",
             "cleaning_done",
             "tab_switched",
+            "saved_insights",
         ]
         for key in keys_to_clear:
             if key in st.session_state:
@@ -65,3 +66,18 @@ def render_sidebar():
             mime="text/csv",
             use_container_width=True,
         )
+
+
+def on_dataset_loaded(quality: str):
+    """
+    Call this right after uploading a file and assessing its quality.
+    Sets auto_insights so render_insights() triggers on the next render.
+
+    Usage:
+        quality = assess_data_quality(df)  # your existing quality check
+        st.session_state.data_quality = quality
+        on_dataset_loaded(quality)
+    """
+    st.session_state.data_quality = quality
+
+    st.session_state.auto_insights = True

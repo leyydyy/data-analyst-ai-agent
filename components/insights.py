@@ -23,11 +23,14 @@ def render_insights(df):
             )
         st.session_state.auto_insights = False
         with st.spinner("AI is analyzing your dataset"):
-            _generate_insights(df)
+            _generate_insights(df, quality=quality) 
+
+    if "saved_insights" in st.session_state:
+        st.write(st.session_state.saved_insights)
 
     if st.button("Regenerate Insights"):
         with st.spinner("AI is analyzing your dataset"):
-            _generate_insights(df)
+            _generate_insights(df, quality=quality) 
 
 
 def _generate_insights(df, quality="unknown"):
@@ -97,7 +100,7 @@ def _generate_insights(df, quality="unknown"):
             ]
         )
 
-        st.write(response.choices[0].message.content)
+        st.session_state.saved_insights = response.choices[0].message.content
 
     except Exception as e:
         st.error(f"AI Error: {e}")
