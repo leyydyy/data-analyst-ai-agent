@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 from openai import OpenAI
 
-client = OpenAI()  # uses OPENAI_API_KEY from env
+client = OpenAI()
 
 def _dataset_summary(df: pd.DataFrame) -> str:
     """Compact dataset description to send to the AI."""
@@ -424,7 +424,7 @@ def render_visualization(df: pd.DataFrame) -> None:
 
     if mode == "AI-recommended":
         cache_key     = "ai_chart_specs"
-        cache_key_sig = "ai_chart_specs_sig"  # tracks which df the cache belongs to
+        cache_key_sig = "ai_chart_specs_sig"
         current_sig   = _df_cache_key(df)
 
         # Bust cache if the dataframe has changed (e.g. after cleaning)
@@ -432,7 +432,7 @@ def render_visualization(df: pd.DataFrame) -> None:
             st.session_state.pop(cache_key, None)
             st.session_state.pop(cache_key_sig, None)
 
-        # Autogenerate on first load 
+        # Autogenerate on first load
         if cache_key not in st.session_state:
             with st.spinner("AI is analyzing your dataset and choosing the best charts…"):
                 try:
@@ -448,18 +448,10 @@ def render_visualization(df: pd.DataFrame) -> None:
 
         specs = st.session_state[cache_key]
 
-        # Header row with re-generate button
-        col1, col2 = st.columns([5, 1])
-        with col1:
-            st.markdown(
-                f"**{len(specs)} charts recommended by AI** — based on your dataset's structure and content."
-            )
-            st.caption("The AI analysed column types, cardinality, and data distributions to select these charts.")
-        with col2:
-            if st.button("Re-generate", help="Ask the AI for a fresh set of chart recommendations"):
-                st.session_state.pop(cache_key, None)
-                st.session_state.pop(cache_key_sig, None)
-                st.rerun()
+        st.markdown(
+            f"**{len(specs)} charts recommended by AI** — based on your dataset's structure and content."
+        )
+        st.caption("The AI analysed column types, cardinality, and data distributions to select these charts.")
 
         # Render each chart
         for i, spec in enumerate(specs):
